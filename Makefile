@@ -103,11 +103,6 @@ endif
 # iup
 endif
 
-# GTK GUI
-ifeq ("$(GTK_SUPPORT)","1")
-CFLAGS+=-DCHDKPTP_GTK=1
-endif
-
 ifneq ($(OSTYPE),Windows)
 # needed for linking static lua lib on linux, should be harmless if dynamic linking
 LINK_LIBS+=m dl
@@ -144,7 +139,7 @@ EXES=$(CHDKPTP_EXE)
 
 all: $(EXES)
 
-SRCS=ptpcodes.c ptp.c chdkptp.c lbuf.c liveimg.c rawimg.c luautil.c $(PTPIP_SRCS)
+SRCS=properties.c ptp.c chdkptp.c lbuf.c liveimg.c rawimg.c luautil.c $(PTPIP_SRCS)
 OBJS=$(SRCS:.c=.o)
 
 $(CHDKPTP_EXE): $(OBJS)

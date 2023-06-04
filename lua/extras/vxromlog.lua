@@ -113,7 +113,7 @@ function m.load(name)
 		d.fmt_desc = function(self)
 			return string.format('Exception vector 0x%x (%s)\n',self.code,self:fmt_code())
 		end
-		d.fmt_regs = function(self)
+		d.fmt_regs = function(self) 
 			local o = self.reg_start
 			local r = 'Registers:\n'
 			for i,name in ipairs(rnames) do

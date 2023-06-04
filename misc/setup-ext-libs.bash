@@ -64,7 +64,7 @@ Misc tuning / debugging options
                     for kernel 3.13. Valid values depend on what tecgraf built,
                     see tecgraf download pages
  -tec-freetype-src: Force using freetype from tecgraf source
- -lua-ver=<ver>: Lua version to use, like 52 or 53, default 53
+ -lua-ver=<ver>: Lua version to use, like 52 or 53, default 52
 
 Prerequisites: (Deb = Debian-ish package names, Fed=Fedora-ish, YMMV)
 * Normal development stuff
@@ -106,7 +106,7 @@ init_vars() {
 	if [ "$opt_lua_ver" == "52" ] ; then
 		LUA_VER="5.2.4"
 		LUA_VER_SFX="52"
-	elif [ "$opt_lua_ver" == "53" ] ; then
+	elif [ "$opt_lua_ver" == "53" ] ; then 
 		LUA_VER="5.3.6"
 		LUA_VER_SFX="53"
 	else
@@ -115,8 +115,8 @@ init_vars() {
 	LUA_VER_DIR="lua${LUA_VER_SFX}"
 	# caps
 	TEC_LUA_SFX="Lua${LUA_VER_SFX}"
-	IUP_VER="3.30"
-	CD_VER="5.14"
+	IUP_VER="3.27"
+	CD_VER="5.12"
 	# IM is not needed for the the CD/IUP features currently used
 	# IM_VER="3.12"
 
@@ -131,7 +131,7 @@ init_vars() {
 	IUP_SRC_PKG="iup-${IUP_VER}_Sources.tar.gz"
 	CD_SRC_PKG="cd-${CD_VER}_Sources.tar.gz"
 	# only needed for OSX, can be forced on others
-	FREETYPE_SRC_PKG="freetype-2.10.2_Sources.zip"
+	FREETYPE_SRC_PKG="freetype-2.6.3_Sources.zip"
 	if [ -z "$opt_tec_freetype_src" ] ; then
 		USE_FREETYPE_SRC=""
 	else
@@ -151,12 +151,8 @@ init_vars() {
 	shasum_cmd="sha1sum"
 	if [ -z "$nosha" ] ; then
 		if [ ! -x "`type -p $shasum_cmd`" ] ; then
-			if [ -x "`type -p shasum`" ] ; then
-				shasum_cmd="shasum"
-			else
-				warn "missing $shasum_cmd"
-				nosha=1
-			fi
+			warn "missing $shasum_cmd"
+			nosha=1
 		fi
 	fi
 }
@@ -199,7 +195,7 @@ init_os() {
 		# for built subdirs. Could try to use to guess TEC_PKG_LINVER
 		KERN_MAJOR="$(uname -r | sed -e 's/^\([0-9]\+\).*/\1/')"
 		KERN_MINOR="$(uname -r | sed -e 's/^\([0-9]\+\)\.\([0-9]\+\).*/\2/')"
-		case "$BUILD_ARCH" in
+		case "$BUILD_ARCH" in 
 		i686)
 			# if [ -z "$TEC_PKG_LINVER" ] ; then
 			# 	TEC_PKG_LINVER="$TEC_PKG_LINVER32"
@@ -380,7 +376,7 @@ do_download() {
 		fi
 	else
 		local TEC_SUBDIR="Linux%20Libraries"
-
+		
 		if [ "$BUILD_OS" == 'Windows' ] ; then
 			do_wget "${SF_URL}/libusb-win32/files/libusb-win32-releases/${LIBUSBWIN32_VER}" \
 				"${LIBUSBWIN32_PKG}"
@@ -415,7 +411,7 @@ do_shasum() {
 # this mirrors download but want standalone step
 do_all_shasum() {
 	info_msg "check download shasums"
-
+	
 	change_dir "$PKG_DIR"
 
 	do_shasum "$LUA_SRC_PKG"
@@ -443,19 +439,6 @@ do_all_shasum() {
 	change_dir "$CHDKPTP_DIR"
 }
 
-# cd 5.14 and iup 3.30 inadvertently include dep files that break build if file locations
-# https://www.mail-archive.com/iup-users@lists.sourceforge.net/msg03702.html
-# don't match, no simple command to rebuild
-clean_src_dep_dirs() {
-	local base="$1"
-	shift
-	for dname in "$@" ; do
-		if [ -d "$base/$dname"/dep ] ; then
-			do_rm -rf "$base/$dname"/dep
-		fi
-	done
-}
-
 extract_pkgs() {
 	local LIBUSB_DEF="$CHDKPTP_DIR/misc/libusb-win32-${LIBUSBWIN32_VER}-libusb0.def"
 	local LIBUSB_DIR="$BUILT_DIR/libusb-win32-bin-${LIBUSBWIN32_VER}"
@@ -468,10 +451,8 @@ extract_pkgs() {
 			# each package has subdir
 			remove_dir "$SRC_DIR/cd"
 			extract "$PKG_DIR/$CD_SRC_PKG" "$SRC_DIR"
-			clean_src_dep_dirs "$SRC_DIR/cd" src
 			remove_dir "$SRC_DIR/iup"
 			extract "$PKG_DIR/$IUP_SRC_PKG" "$SRC_DIR"
-			clean_src_dep_dirs "$SRC_DIR/iup" src srclua5
 			# OSX needs freetype
 			if [ ! -z "$USE_FREETYPE_SRC" ] ; then
 				remove_dir "$SRC_DIR/freetype"
@@ -712,7 +693,7 @@ opt_force_tec_src=""
 opt_tec_linver=""
 opt_dir=""
 opt_redl=""
-opt_lua_ver="53"
+opt_lua_ver="52"
 while [ ! -z "$arg" ] ; do
 	case $arg in
 	-pretend)

@@ -3,7 +3,7 @@ to build chdkptp. This is provided because building IUP and CD on can be
 difficult on platforms like raspberry pi. A static Lua build is also included
 to avoid conflicts with distro provided Lua packages.
 
-Where practical, it is recommended that you use misc/setup-ext-libs.bash
+Where practical, it is recommended that you use misc/setup-ext-libs.bash 
 from the chdkptp source instead.
 
 Information about chdkptp can be found at:
@@ -24,7 +24,7 @@ information.
 These files are intended to allow you to build your own chdkptp without
 building the GUI libraries.  Some files not required by CHDK may be included,
 but these are not complete distributions of Lua, CD and IUP, and are not
-thoroughly tested.
+thoroughly tested. 
 
 Using the libraries to build chdkptp:
 Just unzip the file into the root of the chdkptp source tree. No config.mk

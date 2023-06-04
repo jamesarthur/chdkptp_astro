@@ -31,9 +31,6 @@ void lu_pusharray_raw_u32(lua_State *L, int count, uint32_t *values);
 void lu_pusharray_raw_u16(lua_State *L, int count, uint16_t *values);
 //void lu_rawsetfield(lua_State *L, int index, const char *key);
 
-// optional number, cast to int rather than erroring if number is non-integer
-#define lu_optnumber_as_int(L, narg, d) (int)luaL_optnumber(L, narg, (lua_Number)(d))
-
 #if LUA_VERSION_NUM >= 503
 LUALIB_API void (luaL_register) (lua_State *L, const char *libname, const luaL_Reg *l);
 #define luaL_optint(L, narg, d) (int)luaL_optinteger(L, narg, (lua_Integer)(d))

@@ -16,7 +16,7 @@ function fixfwm(infile,outfile)
 		error(string.format('error %s loading input',tostring(err)))
 	end
 	local ifd=d:get_ifd{0}
-	local oldfwm2 = ifd.byname.ForwardMatrix2:getel(3)
+	local oldfwm2 = ifd.byname.ForwardMatrix2:getel(3) 
 	if oldfwm2[1] == 188 then
 		ifd.byname.ForwardMatrix2:setel({1880,10000},3)
 		local fh,err = io.open(outfile,'wb')

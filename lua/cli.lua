@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2022 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2020 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,7 +11,8 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 --]]
 
 local cli = {
@@ -27,7 +28,168 @@ info printf - message to be printed at normal verbosity
 cli.infomsg = util.make_msgf( function() return prefs.cli_verbose end, 1)
 cli.dbgmsg = util.make_msgf( function() return prefs.cli_verbose end, 2)
 
-local argparser = require'argparser'
+--[[
+get command args of the form -a[=value] -bar[=value] .. [wordarg1] [wordarg2] [wordarg...]
+--]]
+local argparser = { }
+cli.argparser = argparser
+
+-- trim leading spaces
+function argparser:trimspace(str)
+	local s, e = string.find(str,'^[%c%s]*')
+	return string.sub(str,e+1)
+end
+--[[
+get a 'word' argument, either a sequence of non-white space characters, or a quoted string
+inside " \ is treated as an escape character
+return word, end position on success or false, error message
+]]
+function argparser:get_word(str)
+	local result = ''
+	local esc = false
+	local qchar = false
+	local pos = 1
+	while pos <= string.len(str) do
+		local c = string.sub(str,pos,pos)
+		-- in escape, append next character unconditionally
+		if esc then
+			result = result .. c
+			esc = false
+		-- inside double quote, start escape and discard backslash
+		elseif qchar == '"' and c == '\\' then
+			esc = true
+		-- character is the current quote char, close quote and discard
+		elseif c == qchar then
+			qchar = false
+		-- not hit a space and not inside a quote, end
+		elseif not qchar and string.match(c,"[%c%s]") then
+			break
+		-- hit a quote and not inside a quote, enter quote and discard
+		elseif not qchar and (c == '"' or c == "'") then
+			qchar = c
+		-- anything else, copy
+		else
+			result = result .. c
+		end
+		pos = pos + 1
+	end
+	if esc then
+		return false,"unexpected \\"
+	end
+	if qchar then
+		return false,"unclosed " .. qchar
+	end
+	return result,pos
+end
+
+function argparser:parse_words(str)
+	local words={}
+	str = self:trimspace(str)
+	while string.len(str) > 0 do
+		local w,pos = self:get_word(str)
+		if not w then
+			return false,pos -- pos is error string
+		end
+		table.insert(words,w)
+		str = string.sub(str,pos)
+		str = self:trimspace(str)
+	end
+	return words
+end
+
+--[[
+parse a command string into switches and word arguments
+switches are in the form -swname[=value]
+word arguments are anything else
+any portion of the string may be quoted with '' or ""
+inside "", \ is treated as an escape
+on success returns table with args as array elements and switches as named elements
+on failure returns false, error
+defs defines the valid switches and their default values. Can also define default values of numeric args
+TODO enforce switch values, number of args, integrate with help
+]]
+function argparser:parse(str)
+	-- default values
+	local results=util.extend_table({},self.defs)
+	local words,errmsg=self:parse_words(str)
+	if not words then
+		return false,errmsg
+	end
+	for i, w in ipairs(words) do
+		-- look for -name
+		local s,e,swname=string.find(w,'^-(%a[%w_-]*)')
+		-- found a switch
+		if s then
+			if type(self.defs[swname]) == 'nil' then
+				return false,'unknown switch '..swname
+			end
+			local swval
+			-- no value
+			if e == string.len(w) then
+				swval = true
+			elseif string.sub(w,e+1,e+1) == '=' then
+				-- note, may be empty string but that's ok
+				swval = string.sub(w,e+2)
+			else
+				return false,"invalid switch value "..string.sub(w,e+1)
+			end
+			results[swname]=swval
+		else
+			table.insert(results,w)
+		end
+	end
+	return results
+end
+
+-- for comands that want the raw string
+argparser.nop = {
+	parse=function(self,str)
+		return str
+	end
+}
+
+-- for comands that expect no args
+argparser.none = {
+	parse=function(self,str)
+		if string.len(str) ~= 0 then
+			return false,'command takes no arguments'
+		end
+		return str
+	end
+}
+
+function argparser.create(defs)
+	local r={ defs=defs }
+	return util.mt_inherit(r,argparser)
+end
+
+argparser_text=util.extend_table({},argparser)
+
+-- overrides
+function argparser_text.create(defs)
+	local r={ defs=defs }
+	return util.mt_inherit(r,argparser_text)
+end
+
+--[[
+Get a freeform text arg for lua code etc
+if first non-whitespace is <, read from file, otherwise pass as is
+--]]
+function argparser_text:parse(arg)
+	local s, e = string.find(arg,'^[%c%s]*<')
+	if not s then
+		return {text=arg}
+	end
+	local fn = string.sub(arg,e+1)
+	local words,errmsg=self:parse_words(fn)
+	if not words then
+		return false,errmsg
+	end
+	if #words ~= 1 then
+		return false,'expected exactly one filename'
+	end
+	return {input=words[1]}
+end
 
 cli.cmd_proto = {
 	get_help = function(self)
@@ -138,8 +300,8 @@ function cli:execute(line)
 					wbps = "-"
 				else
 					-- note these are based on total command execution time, not just transfer
-					rbps = string.format("%.1f",xferstats.read/tdiff)
-					wbps = string.format("%.1f",xferstats.write/tdiff)
+					rbps = string.format("%d",xferstats.read/tdiff)
+					wbps = string.format("%d",xferstats.write/tdiff)
 				end
 				printf("r %d %s/s w %d %s/s\n",xferstats.read,rbps,xferstats.write,wbps)
 			end
@@ -250,8 +412,6 @@ end
 function cli:connection_status_change()
 	if gui then
 		gui.update_connection_status()
-	elseif con:is_connected() then -- handled in GUI if present
-		con:do_on_connect_actions()
 	end
 end
 
@@ -343,26 +503,7 @@ function cli:get_shoot_common_opts(args)
 		opts.nd = val
 	end
 	if args.sd then
-		local sd,units=string.match(args.sd,'^(-?%d*%.?%d+)(%a*)$')
-
-		if not sd then
-			if string.upper(args.sd) == "INF" then
-				sd=-1
-				units="mm"
-			else
-				return false,string.format('invalid sd %s',tostring(args.sd))
-			end
-		end
-
-		sd = tonumber(sd)
-		if not sd then
-			return false,string.format('invalid sd %s',tostring(args.sd))
-		end
-
-		if sd < 0 then
-			sd = -1
-			units="mm"
-		end
+		local sd,units=string.match(args.sd,'(%d+)(%a*)')
 
 		local convert={
 			mm=1,
@@ -417,7 +558,7 @@ function cli:get_luatext_arg(arg)
 	if not arg.input then
 		return arg.text
 	end
-	return fsutil.readfile(arg.input,{bin=true})
+	return fsutil.readfile_e(arg.input,'b')
 end
 
 --[[
@@ -434,7 +575,7 @@ function cli.list_dev_single(desc)
 		lcon:connect()
 	else
 		-- existing con wrapped in new object won't have info set
-		lcon:update_connection_info()
+		lcon.update_connection_info(lcon)
 	end
 
 	if con_status == '+' and lcon._con == con._con then
@@ -456,51 +597,53 @@ end
 --[[
 helper function to setup lvdumpimg files
 ]]
-function cli.init_lvdumpimg_file_opts(which,args)
-	local ospec=args[which]
-	if not ospec then
-		return
-	end
-
-
-	local filespec
-	-- if ospec is true, want dumpimg to use defaults
-	if type(ospec) == 'string' then
-		filespec=ospec
-	end
-	local pipe = args['pipe'..which]
-	if pipe == true then
-		pipe = 'frame'
-	end
-	local format
-	if which == 'bm' then
-		format = 'pam'
+function cli.init_lvdumpimg_file_opts(which,args,subst)
+	local opts={}
+	local pipeopt, ext, write_fn
+	if which == 'vp' then
+		pipeopt = 'pipevp'
+		ext='ppm'
+		write_fn = chdku.live_dump_vp_pbm
+	elseif which == 'bm' then
+		pipeopt = 'pipebm'
+		ext='pam'
+		write_fn = chdku.live_dump_bm_pam
 	else
-		format = args.vpfmt
+		errlib.throw{etype='bad_arg',msg='invalid type '..tostring(which)}
 	end
-	local opts = {
-		pipe=pipe,
-		filespec=filespec,
-		format=format,
-	}
-	if not args.quiet then
-		local frame_complete_fn
-		local file_complete_fn
-		frame_complete_fn = function(self)
-			cli.infomsg('%s frame %d\n',self.name,self.state.frame_count)
+	local filespec
+	if args[which] == true then
+		if args[pipeopt] then
+			errlib.throw{etype='bad_arg',msg='must specify command with '..tostring(pipeopt)}
 		end
-		file_complete_fn = function(self)
-			-- pipe combine doesn't have a filename
-			if self.filename then
-				cli.infomsg('%s\n',self.filename)
-			end
+		filespec = which..'_${time,%014.3f}.'..ext
+	else
+		filespec = args[which]
+	end
+
+	if args[pipeopt] then
+		opts.pipe = true
+		if args[pipeopt] == 'oneproc' then
+			opts.pipe_oneproc = true
 		end
-		if pipe == 'oneproc' then
-			opts.on_frame_complete = frame_complete_fn
-		elseif pipe == 'frame' then
-			opts.on_frame_complete = file_complete_fn
+	end
+	if filespec and not args.nosubst then
+		subst:validate(filespec)
+	end
+
+	opts.write = function(frame)
+		if not args.nosubst then
+			opts.filename = subst:run(filespec)
 		else
-			opts.on_file_complete = file_complete_fn
+			opts.filename = filespec
+		end
+		write_fn(frame,opts)
+		if not args.quiet then
+			if opts.pipe_oneproc then
+				cli.infomsg('frame %d\n',subst.state.frame)
+			else
+				cli.infomsg('%s\n',opts.filename)
+			end
 		end
 	end
 
@@ -620,18 +763,16 @@ cli:add_commands{
 	{
 		names={'set'},
 		help='show or set option',
-		arghelp='[-v|-c] [-d] [option[=value]]',
+		arghelp='[-v|-c] [option[=value]]',
 		args=argparser.create{
 			v=false,
 			c=false,
-			d=false,
 		},
 
 		help_detail=[[
  Use set with no options to see a list
   -v show description when showing value
   -c output as set command
-  -d reset value to default
 ]],
 		func=function(self,args)
 			local mode
@@ -642,93 +783,22 @@ cli:add_commands{
 				mode='cmd'
 			end
 			if #args == 0 then
-				-- could reset all, but might be better to have explicit option
-				if args.d then
-					return false,'-d requires name'
+				local r={}
+				for name,pref in prefs._each() do
+					local status, desc = prefs._describe(name,mode)
+					-- desc will be error if we somehow get invalid in here
+					table.insert(r,desc)
 				end
-				return true, prefs._describe_all({mode=mode})
+				return true,table.concat(r,'\n')
 			end
 			if #args > 1 then
 				return false, 'unexpected args'
 			end
 			local name,value = string.match(args[1],'^([%a_][%w%a_]+)=(.*)$')
 			if not name then
-				name=args[1] -- no = portion, assume arg is name
+				return prefs._describe(args[1],mode)
 			end
-			if value then
-				if args.d then
-					return false,'unexpected value with -d'
-				end
-				prefs._set(name,value)
-				return true
-			end
-			if args.d then
-				prefs._set_default(name)
-				return true
-			end
-			return true,prefs._describe(name,{mode=mode})
-		end,
-	},
-	{
-		names={'cfgsave'},
-		help='save current settings',
-		arghelp='[-q] [filename]',
-		args=argparser.create{
-			q=false,
-		},
-		help_detail=[[
- Save current settings to file.
- file: Optional filename to write
-  defaults to startup file autosave.chdkptp or autosave_gui.chdkptp
- -q: quiet
-]],
-		func=function(self,args)
-			local filename = args[1]
-			if filename then
-				prefs._save_file(filename)
-				if not args.q then
-					cli.infomsg('wrote %s\n',filename)
-				end
-			else
-				local path = get_chdkptp_home()
-				if not path then
-					return false,"CHDKPTP_HOME / HOME not defined"
-				end
-				write_autosave_rc_file()
-				if not args.q then
-					cli.infomsg('wrote %s\n',fsutil.joinpath(path,get_auto_rc_name()))
-				end
-			end
-			return true
-
-		end,
-	},
-	{
-		names={'cfgversion'},
-		help='config file compatibility check',
-		arghelp='<version>',
-		args=argparser.create{},
-		help_detail=[[
- Used in autosaved config files to for compatibility. Not intended for end users
- version: dotted version number, like 1.2.3
-]],
-		func=function(self,args)
-			local version = args[1]
-			if not version then
-				return false,'expected version'
-			end
-			local major, minor, build = string.match(version,'^(%d+)%.(%d+)%.(%d+)$')
-			if not major then
-				return false,'failed to parse version: '..version
-			end
-			major = tonumber(major)
-			minor = tonumber(minor)
-			build = tonumber(build)
-			-- currently, just warn if config is newer
-			if major > chdku.ver.MAJOR or major == chdku.ver.MAJOR and minor > chdku.ver.MINOR then
-				warnf('config created by newer version %s\n',version)
-			end
-			return true
+			return prefs._set(name,value)
 		end,
 	},
 	{
@@ -742,7 +812,7 @@ cli:add_commands{
 	},
 	{
 		names={'source'},
-		help='execute CLI commands from file',
+		help='execute cli commands from file',
 		arghelp='<file>',
 		args=argparser.create{ },
 		func=function(self,args)
@@ -1047,8 +1117,6 @@ cli:add_commands{
 			imax=false,
 			dmin=false,
 			dmax=false,
-			sizemin=false,
-			sizemax=false,
 			fmatch='%a%a%a_%d%d%d%d%.%w%w%w',
 			rmatch=false,
 			maxdepth=2, -- dcim/subdir
@@ -1077,8 +1145,6 @@ cli:add_commands{
    -imax=n           download images number n or less
    -dmin=n           download images from directory number n or greater
    -dmax=n           download images from directory number n or less
-   -sizemin=n        download images only if file size n or more
-   -sizemax=n        download images only if file size n or less
    -fmatch=<pattern> download only file with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
@@ -1136,8 +1202,6 @@ Standard string substitutions
 				imgnum_max=args.imax,
 				dirnum_min=args.dmin,
 				dirnum_max=args.dmax,
-				sizemin=args.sizemin,
-				sizemax=args.sizemax,
 				fmatch=args.fmatch,
 				rmatch=args.rmatch,
 				maxdepth=tonumber(args.maxdepth),
@@ -1183,8 +1247,6 @@ Standard string substitutions
 			imax=false,
 			dmin=false,
 			dmax=false,
-			sizemin=false,
-			sizemax=false,
 			fmatch='%a%a%a_%d%d%d%d%.%w%w%w',
 			rmatch=false,
 			maxdepth=2, -- dcim/subdir
@@ -1201,8 +1263,6 @@ Standard string substitutions
    -imax=n           delete images number n or less
    -dmin=n           delete images from directory number n or greater
    -dmax=n           delete images from directory number n or less
-   -sizemin=n        delete images only if file size n or more
-   -sizemax=n        delete images only if file size n or less
    -fmatch=<pattern> delete only file with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
@@ -1223,8 +1283,6 @@ Standard string substitutions
 				imgnum_max=args.imax,
 				dirnum_min=args.dmin,
 				dirnum_max=args.dmax,
-				sizemin=args.sizemin,
-				sizemax=args.sizemax,
 				fmatch=args.fmatch,
 				rmatch=args.rmatch,
 				maxdepth=tonumber(args.maxdepth),
@@ -1256,8 +1314,6 @@ Standard string substitutions
 			imax=false,
 			dmin=false,
 			dmax=false,
-			sizemin=false,
-			sizemax=false,
 			fmatch='%a%a%a_%d%d%d%d%.%w%w%w',
 			rmatch=false,
 			maxdepth=2, -- dcim/subdir
@@ -1275,8 +1331,6 @@ Standard string substitutions
    -imax=n           list images number n or less
    -dmin=n           list images from directory number n or greater
    -dmax=n           list images from directory number n or less
-   -sizemin=n        list images only if file size n or more
-   -sizemax=n        list images only if file size n or less
    -fmatch=<pattern> list only files with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
@@ -1298,8 +1352,6 @@ Standard string substitutions
 				imgnum_max=args.imax,
 				dirnum_min=args.dmin,
 				dirnum_max=args.dmax,
-				sizemin=args.sizemin,
-				sizemax=args.sizemax,
 				fmatch=args.fmatch,
 				rmatch=args.rmatch,
 				maxdepth=tonumber(args.maxdepth),
@@ -1342,8 +1394,6 @@ Standard string substitutions
 			fmatch=false,
 			dmatch=false,
 			rmatch=false,
-			sizemin=false,
-			sizemax=false,
 			nodirs=false,
 			maxdepth=100,
 			pretend=false,
@@ -1360,8 +1410,6 @@ Standard string substitutions
    -fmatch=<pattern> download only file with path/name matching <pattern>
    -dmatch=<pattern> only create directories with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
-   -sizemin=n        only download files if size n or more
-   -sizemax=n        only download files if size n or less
    -nodirs           only create directories needed to download file
    -maxdepth=n       only recurse into N levels of directory
    -pretend          print actions instead of doing them
@@ -1398,13 +1446,11 @@ Standard string substitutions
 			for i,v in ipairs(args) do
 				srcs[i]=fsutil.make_camera_path(v)
 			end
-			-- some of these need translating, so can't pass directly as opts
+			-- TODO some of these need translating, so can't pass direct
 			local opts={
 				fmatch=args.fmatch,
 				dmatch=args.dmatch,
 				rmatch=args.rmatch,
-				sizemin=tonumber(args.sizemin),
-				sizemax=tonumber(args.sizemax),
 				dirs=not args.nodirs,
 				maxdepth=tonumber(args.maxdepth),
 				pretend=args.pretend,
@@ -1426,8 +1472,6 @@ Standard string substitutions
 			fmatch=false,
 			dmatch=false,
 			rmatch=false,
-			sizemin=false,
-			sizemax=false,
 			nodirs=false,
 			maxdepth=100,
 			pretend=false,
@@ -1440,8 +1484,6 @@ Standard string substitutions
    -fmatch=<pattern> upload only file with path/name matching <pattern>
    -dmatch=<pattern> only create directories with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
-   -sizemin=n        only upload files if size n or more
-   -sizemax=n        only upload files if size n or less
    -nodirs           only create directories needed to upload file
    -maxdepth=n       only recurse into N levels of directory
    -pretend          print actions instead of doing them
@@ -1457,13 +1499,11 @@ Standard string substitutions
 			local srcs={}
 			-- args has other stuff in it, copy array parts
 			srcs={unpack(args)}
-			-- some of these need translating, so can't pass directly as opts
+			-- TODO some of these need translating, so can't pass direct
 			local opts={
 				fmatch=args.fmatch,
 				dmatch=args.dmatch,
 				rmatch=args.rmatch,
-				sizemin=tonumber(args.sizemin),
-				sizemax=tonumber(args.sizemax),
 				dirs=not args.nodirs,
 				maxdepth=tonumber(args.maxdepth),
 				pretend=args.pretend,
@@ -1481,8 +1521,6 @@ Standard string substitutions
 			fmatch=false,
 			dmatch=false,
 			rmatch=false,
-			sizemin=false,
-			sizemax=false,
 			nodirs=false,
 			maxdepth=100,
 			pretend=false,
@@ -1495,8 +1533,6 @@ Standard string substitutions
    -fmatch=<pattern> only delete files with names matching <pattern>
    -dmatch=<pattern> only delete directories with names matching <pattern>
    -rmatch=<pattern> only recurse into directories with names matching <pattern>
-   -sizemin=n        only delete files if size n or more
-   -sizemax=n        only delete files if size n or less
    -nodirs           don't delete directories recursed into, only files
    -maxdepth=n       only recurse into N levels of directory
    -pretend          print actions instead of doing them
@@ -1514,13 +1550,11 @@ Standard string substitutions
 			for i,v in ipairs(args) do
 				tgts[i]=fsutil.make_camera_path(v)
 			end
-			-- some of these need translating, so can't pass directly as opts
+			-- TODO some of these need translating, so can't pass direct
 			local opts={
 				fmatch=args.fmatch,
 				dmatch=args.dmatch,
 				rmatch=args.rmatch,
-				sizemin=tonumber(args.sizemin),
-				sizemax=tonumber(args.sizemax),
 				dirs=not args.nodirs,
 				maxdepth=tonumber(args.maxdepth),
 				pretend=args.pretend,
@@ -1589,8 +1623,8 @@ Standard string substitutions
 				r = host_ver .. "not connected"
 			end
 			if args.p then
-				r = string.format('chdkptp %s-%s built %s %s\n%s',
-									chdku.ver.FULL_STR,chdku.ver.DESC,
+				r = string.format('chdkptp %d.%d.%d-%s built %s %s\n%s',
+									chdku.ver.MAJOR,chdku.ver.MINOR,chdku.ver.BUILD,chdku.ver.DESC,
 									chdku.ver.DATE,chdku.ver.TIME,r)
 			end
 			if args.l then
@@ -1605,9 +1639,6 @@ Standard string substitutions
 				if cd then
 					r = r .. '\nCD '..cd._VERSION
 				end
-				if lgi then
-					r = r .. '\nLGI '..lgi._VERSION
-				end
 			end
 			return status,r
 		end,
@@ -1620,7 +1651,6 @@ Standard string substitutions
 			b=false,
 			d=false,
 			p=false,
-			v='1193', -- default to Canon. Canon has multiple IDs, but https://usb-ids.gowdy.us/read/UD?sort=name shows only shows consumer devs on this one
 			s=false,
 			h=false,
 			nodis=false,
@@ -1628,17 +1658,14 @@ Standard string substitutions
 		},
 
 		help_detail=[[
- If no options are given, connects to the first available PTP USB device.
+ If no options are given, connects to the first available USB device.
  USB dev spec:
   -b=<bus>
   -d=<dev>
   -p=<pid>
   -s=<serial>
-  -v[=<vid>]
   model
-
- <pid> USB product ID, as decimal or hex number.
- <vid> USB vendor ID, as decimal or hex number, default 1193 (Canon). Use -v alone for all
+ <pid> is the USB product ID, as a decimal or hexadecimal number.
  All other values are treated as a Lua pattern, unless -nopat is given.
  If the serial or model are specified, a temporary connection will be made to each device
  If <model> includes spaces, it must be quoted.
@@ -1654,7 +1681,6 @@ Standard string substitutions
 				d='dev',
 				p='product_id',
 				s='serial_number',
-				v='vendor_id',
 				[1]='model',
 			}
 			for k,v in pairs(opt_map) do
@@ -1681,9 +1707,6 @@ Standard string substitutions
 			else
 				if match.product_id and not tonumber(match.product_id) then
 					return false,"expected number for product id"
-				end
-				if match.vendor_id and not tonumber(match.vendor_id) then
-					return false,"expected number for vendor id"
 				end
 				local devices = chdk.list_usb_devices()
 				for i, devinfo in ipairs(devices) do
@@ -1892,16 +1915,19 @@ Standard string substitutions
 			if not con:live_is_api_compatible() then
 				return false,'incompatible api'
 			end
-			con:live_dump_start(dumpfile)
+			status, err = con:live_dump_start(dumpfile)
+			if not status then
+				return false,err
+			end
 			for i=1,args.count do
 				if not args.quiet then
 					printf('grabbing frame %d\n',i)
 				end
-				status, err = con:live_get_frame_pcall(what)
+				status, err = con:live_get_frame(what)
 				if not status then
 					break
 				end
-				status, err = con:live_dump_frame_pcall()
+				status, err = con:live_dump_frame()
 				if not status then
 					break
 				end
@@ -1918,49 +1944,35 @@ Standard string substitutions
 	},
 	{
 		names={'lvdumpimg'},
-		help='dump camera display frames to images',
+		help='dump camera display frames to netpbm images',
 		arghelp="[options]",
 		args=argparser.create({
-			infile=false,
+--			infile=false,
 			count=1,
-			seek=false,
 			wait=false,
-			fps=false,
+			fps=10,
 			vp=false,
 			bm=false,
 			pipevp=false,
 			pipebm=false,
-			vpfmt='ppm',
 			nopal=false,
 			nobmo=false,
 			quiet=false,
 			nosubst=false,
 		}),
+-- TODO
+--   -infile=<file> lvdump file to use as source instead of camera
 		help_detail=[[
  options:
-   -infile=<file> get frames from lvdump file <file> instead of camera
    -count=<N> number of frames to dump, default 1
-              if source is file, use 'all' for all frames
-   -seek=<N>  if sources is file start on Nth frame or Nth from end if negative
    -wait=<N>  wait N ms between frames
-   -fps=<N>   specify wait as a frame rate, 0 = unlimited
-              default 10 if source is camera, 0 if file
-   -vp[=dest] get viewfinder in format specified by vpfmt
+   -fps=<N>   specify wait as a frame rate, default 10
+   -vp[=dest] get viewfinder in ppm format
    -bm[=dest] get ui overlay in pam format
-   -vpfmt=<ppm|yuv-s-pgm|yuv-s-raw>
-      format for viewport data, default ppm
-       ppm        RGB ppm
-       yuv-s-pgm  Output Y, U, and V channels as separate pgm format images
-       yuv-s-raw  Output Y, U, and V channels as raw values
-   -pipevp[=pipetype]
-   -pipebm[=pipetype]
-      interpret vp or bm 'dest' as a command to pipe to. pipetype may be one of
-       frame   command started once per frame. For split formats, each
-               channel is piped to the same process. Default
-       split   for split formats, command is started for each channel
-       oneproc a single command is piped all frames
-       combine for -pipebm only, specify bitmap be piped to the command
-               specified with -pipevp. Viewport data is written first
+   -pipevp[=oneproc]
+   -pipebm[=oneproc]
+      treat vp or bm 'dest' as a command to pipe to. With =oneproc a single process
+      receives all frames. Otherwise, a new process is spawned for each frame
    -nopal     don't get palette for ui overlay
    -nobmo     don't get D6 ui overlay opacity data
    -quiet     don't print progress
@@ -1969,15 +1981,10 @@ Standard string substitutions
    ${date,datefmt} current time formatted with os.date()
    ${frame,strfmt} current frame number formatted with string.format
    ${time,strfmt}  current time in seconds, as float, formatted with string.format
-   ${serial}       camera serial number, or empty if not available or infile used
-   ${pid,strfmt}   camera platform ID, default format %x, 0 if source is file
-   ${channel}      y, u or v, if format is split, otherwise empty
+   ${serial}       camera serial number, or empty if not available
+   ${pid,strfmt}   camera platform ID, default format %x
    Standard string substitutions
-   Viewport defaults depend on -vpfmt
-    ppm:       vp_${time,%014.3f}.ppm
-    yuv-s-pgm: vp_${time,%014.3f}-${channel}.pgm
-    yuv-s-raw: vp_${time,%014.3f}-${channel}.bin
-   Bitmap default is bm_${time,%014.3f}.pam
+   default vp_${time,%014.3f}.ppm bm_${time,%014.3f}.pam for viewfinder and ui respectively
    if piping with oneproc, time will be the start of the first frame and frame will be 1
 ]],
 		func=function(self,args)
@@ -2004,128 +2011,77 @@ Standard string substitutions
 				if args.wait then
 					return false,'specify wait or fps, not both'
 				end
-				local fps = tonumber(args.fps)
-				if fps == 0 then
-					args.wait = false
-				else
-					args.wait = 1000/fps
-				end
-			end
-			if not args.wait then
-				if args.infile then
-					args.wait = false
-				else
-					args.wait = 100
-				end
+				args.wait = 1000/tonumber(args.fps)
 			end
 			if args.count then
-				if args.count == 'all' then
-					if not args.infile then
-						return false, 'count=all only valid when source is file'
-					end
-				else
-					args.count = tonumber(args.count)
-					if not args.count or args.count < 1 then
-						return false, 'invalid count'
-					end
-				end
+				args.count = tonumber(args.count)
 			end
 
-			local d_opts = {
-				nosubst = args.nosubst,
-				missing = info,
-				vp = cli.init_lvdumpimg_file_opts('vp',args),
-				bm = cli.init_lvdumpimg_file_opts('bm',args),
-			}
-
-			local lv
-			local get_frame
-			if args.infile then
-				lv = lvutil.live_wrapper()
-				lv:replay_load(args.infile)
-				if args.seek then
-					local seek = tonumber(args.seek)
-					if seek < 0 then
-						lv:replay_seek('end',seek)
-					else
-						lv:replay_seek('set',seek)
-					end
-				end
-				get_frame = function()
-					return pcall(function()
-						lv:replay_frame()
-					end)
-				end
-			else
-				if args.seek then
-					return false, 'seek only valid when source is file'
-				end
-				if not con:is_connected() then
-					return false,'not connected'
-				end
-
-				if not con:live_is_api_compatible() then
-					return false,'incompatible api'
-				end
-				d_opts.con = con
-				lv = con.live
-				get_frame = function()
-					return con:live_get_frame_pcall(what)
-				end
+			if not con:is_connected() then
+				return false,'not connected'
 			end
+
+			local status,err
+			if not con:live_is_api_compatible() then
+				return false,'incompatible api'
+			end
+
+			-- state for substitutions
+			local subst=varsubst.new(util.extend_table_multi({
+				frame=varsubst.format_state_val('frame','%06d'),
+				time=varsubst.format_state_val('time','%d'),
+				date=varsubst.format_state_date('date','%Y%m%d_%H%M%S'),
+			},{
+				varsubst.string_subst_funcs,
+				chdku.con_subst_funcs,
+			}))
+			con:set_subst_con_state(subst.state)
+
+			local vp_opts = cli.init_lvdumpimg_file_opts('vp',args,subst)
+			local bm_opts = cli.init_lvdumpimg_file_opts('bm',args,subst)
 
 			local t0=ticktime.get()
 			local t_frame_start=t0
 
-			local i = 1
-			lv:dumpimg_init(d_opts)
-			local status,err
-			while true do
+			-- TODO frame source should be split out to allow dumping from existing lvdump file
+			for i=1,args.count do
 				t_frame_start=ticktime.get()
+				-- TODO should use wrapped frame, maybe con:live_get_frame
+				frame = con:get_live_data(frame,what)
 
-				-- break on error to allow cleanup
-				status,err = get_frame()
-				if not status then
-					break
-				end
+				subst.state.frame = i
+				-- set time state once per frame to avoid varying between viewport and bitmap
+				subst.state.date = os.time()
+				subst.state.time = ustime.new():float()
 
-				status,err = lv:dumpimg_frame_pcall()
-				if not status then
-					break
+				if args.vp then
+					vp_opts.write(frame)
 				end
-
-				if args.count ~= 'all' and i >= args.count then
-					break
+				if args.bm then
+					bm_opts.write(frame)
 				end
-
-				if args.infile and lv:replay_eof() then
-					if args.count ~= 'all' then
-						util.warnf('eof at %d of %d\n',i,args.count)
-					end
-					break
-				end
-				i = i + 1
 				local etms=ticktime.elapsedms(t_frame_start)
-				if args.wait and etms < args.wait then
+				if args.wait and i < args.count and etms < args.wait then
 					sys.sleep(args.wait - etms)
 				end
 			end
-			-- close handles if using oneproc
-			lv:dumpimg_finish()
-			-- clean up replay
-			if args.infile then
-				lv:replay_end()
+			-- if using oneproc pipe, need to close
+			if vp_opts.filehandle then
+				vp_opts.filehandle:close()
 			end
-			if i > 0 and not args.quiet then
+			if bm_opts.filehandle then
+				bm_opts.filehandle:close()
+			end
+			if subst.state.frame and not args.quiet then
 				local t_total = ticktime.elapsed(t0)
 				-- fudge to handle the final sleep being skipped
 				local etms=ticktime.elapsedms(t_frame_start)
 				if args.wait and etms < args.wait then
 					t_total = t_total + (args.wait - etms)/1000
 				end
-				cli.dbgmsg('frames:%d time:%0.2f fps:%0.2f\n',i,t_total,i/t_total)
+				cli.dbgmsg('frames:%d time:%f fps:%f\n',subst.state.frame,t_total,subst.state.frame/t_total)
 			end
-			return status,err
+			return true
 		end,
 	},
 	{
@@ -2165,8 +2121,7 @@ Standard string substitutions
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
-                  Decimals accepted, -1 or inf for infinity.
+   -sd=<v>[units]  subject distance (focus), units one of m, mm, in, ft default m
    -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
                   if NONE, override will be ignored if not supported in current mode
                   if not given, the current camera mode is preferred
@@ -2406,16 +2361,12 @@ Standard string substitutions
 			nosubst=false,
 			seq=false,
 			script=false,
-			camscript=false,
-			tpl=false,
-			cfg=false,
-			menuopts=false,
 		},
 		help_detail=[[
  [dest] path/name specification for saved files
   None: Save in current directory, with default names like IMG_0123.jpg
   Contains a '$': Name generated using substitutions below (unless -nosubst)
-  Ending in '/' or name of existing directory: Default names saved in directory
+  Ending in '/' or name of existing directory: Default names saved in directory 
   Other: Extension appended based on type. Not useful with multi-shot options
 
  options:
@@ -2429,8 +2380,7 @@ Standard string substitutions
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
-                  Decimals accepted, -1 or inf for infinity.
+   -sd=<v>[units]  subject distance (focus), units one of m, mm, in, ft default m
    -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
                   if NONE, override will be ignored if not supported in current mode
                   if not given, the current camera mode is preferred
@@ -2453,39 +2403,6 @@ Standard string substitutions
    -nosubst     don't do string substitution on file names
    -seq=<n>     initial value for shotseq subst string, default cli_shotseq
    -script=<filename> use local file <filename> for shooting script
-   -camscript=<filename> use local file <filename> for shooting script, where
-                script is a CHDK camera side Lua script with @/# menu options
-                If path begins with A/, the file is loaded from the camera
-   -tpl=<filename> template for use with -camscript
-   -cfg=<filename> CHDK saved script settings file for use with -camscript
-                   If path begins with A/, the file is loaded from the camera
-   -menuopts=<name1=value,...> set individual CHDK menu options with -camscript
-                delimited by ','
-
- Using custom shooting scripts:
-   -script, -camscript and related options can be used to remote shoot with
-   custom exposure or other logic. -camscript allows the use of scripts written
-   to be run from the CHDK menu, without specific support for remoteshoot.
-   However, whether this actually works depends on the specific script.
-
-   The -tpl and -cfg options operate as described for the camscript command,
-   and the comma delimited items of -menuopts are equivalent to the menu option
-   arguments. camscript may also be used to generate cfg files for use with
-   -camscript or scripts for use with -script.
-
-   Files specified for -cfg and -camscript are loaded from the camera if the
-   path starts with 'A/'. Use './A/...' or a full path to specify local files
-   in a directory named 'A'.
-
-   When using -script or -camscript, many remoteshoot options have no effect
-   unless the camera side script has code to specifically support them. This
-   includes exposure, focus, -filedummy and canon image format related options.
-   Additionally, options defining number of shots and interval (-shots, -cont,
-   -int etc) must match what the script will do, but will not control the script
-   unless it has code to implement them.  Scripts may access the values of these
-   options using the rs_opts global variable.
-
-   Messages sent by the script using write_usb_msg are displayed.
 
 Substitutions
 ${serial}         camera serial number, or empty if not available
@@ -2597,43 +2514,7 @@ Standard string substitutions
 			end
 			local shootscript
 			if args.script then
-				shootscript=fsutil.readfile(args.script,{bin=true})
-			end
-			if args.camscript then
-				if args.script then
-					return false,'specify -script or -camscript, not both'
-				end
-				local menuvals
-				if args.menuopts then
-					if type(args.menuopts) ~= 'string' then
-						return false,'-menuopts requires option string'
-					end
-					menuvals = {}
-					for i,s in ipairs(util.string_split(args.menuopts,',',{plain=true,empty=false})) do
-						local name,val = s:match('([A-Za-z0-9._-]+)=(.+)')
-						if not name then
-							return false, 'malformed menu option '..s
-						end
-						table.insert(menuvals,{name,val})
-					end
-				end
-				shootscript = chdkmenuscript.process_script{
-					file=args.camscript,
-					cfgfile=args.cfg,
-					tplfile=args.tpl,
-					menuvals=menuvals,
-					info_fn=cli.infomsg,
-				}
-			else
-				if args.tpl then
-					return false,'-tpl requires -camscript'
-				end
-				if args.cfg then
-					return false,'-cfg requires -camscript'
-				end
-				if args.menuopts then
-					return false,'-menuopts requires -camscript'
-				end
+				shootscript=fsutil.readfile_e(args.script,'b')
 			end
 
 			-- convert to integer ms
@@ -2647,18 +2528,15 @@ Standard string substitutions
 			if not rstatus then
 				return false,rerr
 			end
-			local execinfo = {}
 			local rs_init_vals = rstatus
 
-			-- start the shooting script
-			-- NOTE script runtime errors will not get picked up here, since script
-			-- must run asynchronously with capture_get_data logic
 			if shootscript then
 				cli.dbgmsg('rs script %s\n',args.script)
-				con:exec('rs_opts='..opts_s..' '..shootscript,{libs={'rs_shoot'},execinfo=execinfo})
+				con:exec('rs_opts='..opts_s..' '..shootscript,{libs={'rs_shoot'}})
 			else
 				cli.dbgmsg('rs_shoot\n')
-				con:exec('rs_shoot('..opts_s..')',{libs={'rs_shoot'},execinfo=execinfo})
+				-- TODO script errors will not get picked up here
+				con:exec('rs_shoot('..opts_s..')',{libs={'rs_shoot'}})
 			end
 
 			local rcopts=chdku.rc_init_std_handlers{
@@ -2673,15 +2551,7 @@ Standard string substitutions
 				lstart=opts.lstart,
 				lcount=opts.lcount,
 			}
-			rcopts.execinfo=execinfo
 			rcopts.do_subst=do_subst
-			-- TODO rlib script should return status or use error()
-			-- may want different formatting for debug messages
-			local msg_handler_print = function(msg) cli.infomsg('%s\n',chdku.format_script_msg(msg)) end
-			rcopts.msg_handlers = {
-				['return'] = msg_handler_print,
-				user = msg_handler_print,
-			}
 
 			if args.shotwait then
 				rcopts.timeout=tonumber(args.shotwait)
@@ -2694,7 +2564,7 @@ Standard string substitutions
 				end
 				-- ensure timeout is longer than interval
 				if opts.int and rcopts.timeout < opts.int + 10000 then
-					rcopts.timeout = opts.int + 10000
+					rcopts.timeout = opts.int + 10000 
 				end
 			end
 			if args.seq then
@@ -2704,38 +2574,13 @@ Standard string substitutions
 			local status,err
 			local shot = 1
 			repeat
-				-- wait for script on final shot
-				-- TODO may not want to wait with -script, but script must end for cleanup
-				if shot == opts.shots then
-					rcopts.wait_script = true
-				end
 				rcopts.shotseq=prefs.cli_shotseq
 				cli.dbgmsg('get data %d\n',shot)
 				status,err = con:capture_get_data_pcall(rcopts)
 				if not status then
-					-- full error message will be returned by cli command, don't double print here
-					warnf('capture_get_data failed\n')
-					local pstatus,perr = pcall(function()
-						if con:is_connected() then
-							if con:script_status().run then
-								cli.dbgmsg('sending stop message\n')
-								con:write_msg('stop')
-								-- give the script some time to end, will be killed on cleanup if it doesn't
-								con:wait_status{timeout=1000,run=false}
-							end
-							-- if get_capture_data failed, may be unprocessed messages, append
-							con:read_all_msgs{
-								['return']=msg_handler_print,
-								user=msg_handler_print,
-								error=function(msg)
-									err = tostring(err) .. '\n' .. chdku.format_exec_error(execinfo,msg)
-								end
-							}
-						end
-					end)
-					if not pstatus then
-						warnf('error attempting cleanup %s\n',tostring(perr))
-					end
+					warnf('capture_get_data error %s\n',tostring(err))
+					cli.dbgmsg('sending stop message\n')
+					con:write_msg_pcall('stop')
 					break
 				end
 				shot = shot + 1
@@ -2744,8 +2589,37 @@ Standard string substitutions
 										  -- TODO should be done in a generic way in wait_status / cli prompt?
 			until shot > opts.shots
 
- 			-- try to uninit, killing any still running script
-			local ustatus, uerr = con:execwait_pcall('rs_cleanup('..serialize(rs_init_vals)..')',{libs={'rs_shoot_cleanup',clobber=true}})
+			local t0=ticktime.get()
+			-- wait for shot script to end or timeout
+			local wpstatus,wstatus=con:wait_status_pcall{
+				run=false,
+				timeout=30000,
+			}
+			if not wpstatus then
+				warnf('error waiting for shot script %s\n',tostring(werr))
+			else
+				if wstatus.timeout then
+					warnf('timed out waiting for shot script\n')
+				end
+				-- TODO should allow passing a message handler to capture_get_data
+				-- stop immediately on script error
+				if wstatus.msg then
+					con:read_all_msgs({
+						['return']=function(msg,opts)
+							warnf("unexpected script return %s\n",tostring(msg.value))
+						end,
+						user=function(msg,opts)
+							warnf("unexpected script msg %s\n",tostring(msg.value))
+						end,
+						error=function(msg,opts)
+							warnf("script error %s\n",tostring(msg.value))
+						end,
+					})
+				end
+			end
+			cli.dbgmsg("script wait time %.4f\n",ticktime.elapsed(t0))
+
+			local ustatus, uerr = con:execwait_pcall('rs_cleanup('..serialize(rs_init_vals)..')',{libs={'rs_shoot_cleanup'}}) -- try to uninit
 			-- if uninit failed, combine with previous status
 			if not ustatus then
 				uerr = 'uninit '..tostring(uerr)
@@ -2766,7 +2640,7 @@ Standard string substitutions
 		names={'rsint'},
 		help='shoot and download with interactive control',
 		arghelp="[dest] [options]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			u='s',
 			tv=false,
 			sv=false,
@@ -2797,7 +2671,7 @@ Standard string substitutions
  [dest] path/name specification for saved files
   None: Save in current directory, with default names like IMG_0123.jpg
   Contains a '$': Name generated using substitutions below (unless -nosubst)
-  Ending in '/' or name of existing directory: Default names saved in directory
+  Ending in '/' or name of existing directory: Default names saved in directory 
   Other: Extension appended based on type. Not useful with multi-shot options
 
  options:
@@ -2811,8 +2685,7 @@ Standard string substitutions
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
-                  Decimals accepted, -1 or inf for infinity.
+   -sd=<v>[units]  subject distance (focus), units one of m, mm, in, ft default m
    -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
                   if NONE, override will be ignored if not supported in current mode
                   if not given, the current camera mode is preferred
@@ -2869,9 +2742,21 @@ Standard string substitutions
 		names={'rec'},
 		help='switch camera to shooting mode',
 		func=function(self,args)
-			local rstatus,rerr = con:execwait(([[
-return rlib_switch_mode(1,%s)
-]]):format(prefs.cam_switch_mode_timeout),{libs='switch_mode'})
+			local rstatus,rerr = con:execwait([[
+if not get_mode() then
+	switch_mode_usb(1)
+	local i=0
+	while not get_mode() and i < 300 do
+		sleep(10)
+		i=i+1
+	end
+	if not get_mode() then
+		return false, 'switch failed'
+	end
+	return true
+end
+return false,'already in rec'
+]])
 			cli:mode_change()
 			return rstatus,rerr
 		end,
@@ -2880,9 +2765,21 @@ return rlib_switch_mode(1,%s)
 		names={'play'},
 		help='switch camera to playback mode',
 		func=function(self,args)
-			local rstatus,rerr = con:execwait(([[
-return rlib_switch_mode(0,%s)
-]]):format(prefs.cam_switch_mode_timeout),{libs='switch_mode'})
+			local rstatus,rerr = con:execwait([[
+if get_mode() then
+	switch_mode_usb(0)
+	local i=0
+	while get_mode() and i < 300 do
+		sleep(10)
+		i=i+1
+	end
+	if get_mode() then
+		return false, 'switch failed'
+	end
+	return true
+end
+return false,'already in play'
+]])
 			cli:mode_change()
 			return rstatus,rerr
 		end,
@@ -2960,155 +2857,13 @@ return rlib_switch_mode(0,%s)
 			return true
 		end,
 	},
-	{
-		names={'camscript'},
-		help='convert or run CHDK script with menu options',
-		arghelp="[options] <camera script> [menu options]",
-		args=argparser.create({
-			cfg=false,
-			savecfg=false,
-			tpl=false,
-			save=false,
-			load=false,
-			run=false,
-			wait=false,
-			quiet=false,
-		}),
-		help_detail=[[
- <camera script>
-   CHDK camera Lua script with menu header.
-   If path begins with A/, the file is loaded from the camera
- [menu options]
-   Script menu items, by name like a=1 b=2
-   Numeric values are as they would appear in the menu header
-   Booleans may be with either true/false or 0/1
-   Table and enums may be set by value using name.value, like
-    foo.value=Whatever
-   Range checks from the header are applied
- options:
-   -cfg=<filename>
-     CHDK script configuration for menu values, as found in CHDK/DATA/scriptname.N
-     If path begins with A/, the file is loaded from the camera
-   -tpl=<filename> camera lua script template, where
-      --[!glue:start] causes everything preceding it to be discarded
-      --[!glue:vars] is replaced by code that sets the CHDK menu variables
-      --[!glue:body] is replaced by the body to the script, or a line that loads
-                     a camera side file specified with -remote
-   -save=<filename> save converted file to <filename>
-   -savecfg=<filename> save final settings values as script cfg
-   -run   run converted script
-   -wait  wait for converted script to complete
-   -load[=<filename>] load camera script with loadfile() instead of including
-                      full script in output. If filename is omitted, defaults
-                      to A/CHDK/SCRIPTS/<script name> if script is PC file,
-                      or full path to script if a camera file
-   -quiet don't print status messages
-]],
-		func=function(self,args)
-			if #args < 1 then
-				return false, 'expected camera script name'
-			end
-			local scriptfile = args[1]
-			if args.save and type(args.save) ~= 'string' then
-				return false, 'expected save filename'
-			end
-			if args.savecfg and type(args.savecfg) ~= 'string' then
-				return false, 'expected savecfg filename'
-			end
-			if args.tpl and type(args.tpl) ~= 'string' then
-				return false, 'expected template filename'
-			end
-			local check_only
-			if not args.save and not args.run and not args.savecfg then
-				check_only = true
-				if not args.quiet then
-					cli.infomsg('no -run, -save or -savecfg, syntax check only\n')
-				end
-			end
-
-			local menuvals
-			if #args > 1 then
-				menuvals = {}
-				for i=2,#args do
-					local name,val = args[i]:match('([A-Za-z0-9._-]+)=(.+)')
-					if not name then
-						return false, 'malformed menu option '..args[i]
-					end
-					table.insert(menuvals,{name,val})
-				end
-			end
-
-			local script = chdkmenuscript.process_script{
-				file=scriptfile,
-				cfgfile=args.cfg,
-				load=args.load,
-				tplfile=args.tpl,
-				save=args.save,
-				savecfg=args.savecfg,
-				menuvals=menuvals,
-				info_fn=function(...)
-					if not args.quiet then
-						cli.infomsg(...)
-					end
-				end,
-			}
-
-			if check_only then
-				return true,'OK'
-			end
-			if args.run then
-				if args.wait then
-					local rets={}
-					local msgs=function(msg)
-						-- TODO
-						printf('%s\n',chdku.format_script_msg(msg))
-					end
-					con:execwait(script,{rets=rets,msgs=msgs})
-					local r=''
-					for i=1,table.maxn(rets) do
-						r=r .. chdku.format_script_msg(rets[i]) .. '\n'
-					end
-					return true,r
-				else
-					con:exec(script)
-				end
-			end
-			return true
-		end,
-	},
-	{
-		names={'unlock'},
-		help='unlock camera keyboard and screen',
-		arghelp="[-kb]",
-		args=argparser.create({
-			kb=false,
-		}),
-		help_detail=[[
- options:
-  -kb   unlocks keyboard only
-
- This command sends events to enable camera keyboard and screen, which are
- commonly locked by Canon firmware when PTP used.
- Use cam_connect_unlock_ui to automatically unlock on connect.
-]],
-		func=function(self,args)
-			if type(args.kb) ~= 'boolean' then
-				return false,'invalid option'
-			end
-			if #args > 0 then
-				return false, 'unexpected args'
-			end
-			con:execwait(('ptp_ui_unlock(%s)'):format(args.kb),{libs='ptp_ui_unlock'})
-			return true
-		end,
-	},
 }
 
 
-prefs._add('cli_time','boolean','show CLI execution times')
-prefs._add('cli_xferstats','boolean','show CLI data transfer stats')
-prefs._add('cli_verbose','number','control verbosity of CLI',1)
+prefs._add('cli_time','boolean','show cli execution times')
+prefs._add('cli_xferstats','boolean','show cli data transfer stats')
+prefs._add('cli_verbose','number','control verbosity of cli',1)
 prefs._add('cli_source_max','number','max nested source calls',10)
-prefs._add('cli_error_exit','boolean','exit on CLI command error')
+prefs._add('cli_error_exit','boolean','exit on cli command error')
 prefs._add('cli_shotseq','number','shooting command ${shotseq} value, incremented on shot',1)
 return cli

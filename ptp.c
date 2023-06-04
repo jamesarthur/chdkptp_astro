@@ -3,7 +3,6 @@
  * This file is based on libptp2 by Mariusz Woloszyn
  * Copyright (C) 2001-2005 Mariusz Woloszyn <emsi@ipartners.pl>
  * Additional modifictions by <reyalp (at) gmail dot com> and other CHDK contributors
- * Copyright (C) 2010-2022 <reyalp (at) gmail dot com>
  *
  *  libptp2 is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -16,7 +15,8 @@
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
+ *  along with libptp2; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "config.h"
@@ -60,7 +60,7 @@
 
 static void
 ptp_debug (PTPParams *params, const char *format, ...)
-{
+{  
 	va_list args;
 
 	va_start (args, format);
@@ -73,7 +73,7 @@ ptp_debug (PTPParams *params, const char *format, ...)
 		fflush (stderr);
 	}
 	va_end (args);
-}
+}  
 
 /* Pack / unpack functions */
 
@@ -237,7 +237,7 @@ ptp_tcp_senddata (PTPParams* params, PTPContainer* ptp,
 	PTPIPContainer pkt;
 	memset(&pkt,0,sizeof(pkt));
 	length = 20; // header + transaction ID + 64 bit length
-	pkt.length = htod32(length);
+	pkt.length = htod32(length); 
 	pkt.type = htod32(PTPIP_TYPE_START_DATA);
 
 	pkt.datactl.trans_id = htod32(ptp->Transaction_ID);
@@ -442,7 +442,7 @@ ptp_tcp_getdata (PTPParams* params, PTPContainer* ptp, PTPGetdataParams *gdparam
 	if(ret != PTP_RC_OK) {
 		return ret;
 	}
-
+	
 	// read the END_DATA packet
 	if(!got_end) {
 		ret=params->read_control_func(params,&pkt);
@@ -466,7 +466,7 @@ uint16_t ptp_usb_read_data(PTPParams *params, unsigned size, unsigned char *dst)
 	// if less than size in buffer, need to read directly
 	if(rtotal < size) {
 		// USB only wants to read whole packets
-		// TODO this is inefficient, if we start unaligned, will use buffer every trans
+		// TODO this is inefficient, if we start unaligned, will user buffer every trans
 		int toread = size - rtotal;
 		int rest = toread % PTP_USB_BULK_HS_MAX_PACKET_LEN; // could use connection max packet size
 
@@ -716,7 +716,7 @@ ptp_usb_getresp (PTPParams* params, PTPContainer* resp)
  * filled in (i.e. operation code and parameters). It's up to caller to do
  * so.
  * The flags decide whether the transaction has a data phase and what is its
- * direction (send or receive).
+ * direction (send or receive). 
  * If transaction is sending data the sendlen should contain its length in
  * bytes, otherwise it's ignored.
  * The data should contain an address of a pointer to data going to be sent
@@ -732,12 +732,12 @@ ptp_usb_getresp (PTPParams* params, PTPContainer* resp)
  * all fields filled in.
  **/
 static uint16_t
-ptp_transaction (PTPParams* params, PTPContainer* ptp,
+ptp_transaction (PTPParams* params, PTPContainer* ptp, 
 			uint16_t flags, unsigned int sendlen, char** data)
 {
-	if ((params==NULL) || (ptp==NULL))
+	if ((params==NULL) || (ptp==NULL)) 
 		return PTP_ERROR_BADPARAM;
-
+	
 	ptp->Transaction_ID=params->transaction_id++;
 	ptp->SessionID=params->session_id;
 	/* send request */
@@ -778,7 +778,7 @@ ptp_transaction (PTPParams* params, PTPContainer* ptp,
  */
 static uint16_t ptp_getdata_transaction(PTPParams* params, PTPContainer* ptp, PTPGetdataParams *gdparams )
 {
-	if ((params==NULL) || (ptp==NULL) || (gdparams==NULL))
+	if ((params==NULL) || (ptp==NULL) || (gdparams==NULL)) 
 		return PTP_ERROR_BADPARAM;
 
 	ptp->Transaction_ID=params->transaction_id++;
@@ -812,7 +812,7 @@ static uint16_t ptp_getdata_transaction(PTPParams* params, PTPContainer* ptp, PT
 		    return PTP_ERROR_BADPARAM;	    \
 	    }\
 	}
-
+					
 
 static inline uint16_t
 ptp_usb_event (PTPParams* params, PTPContainer* event, int wait)
@@ -822,7 +822,7 @@ ptp_usb_event (PTPParams* params, PTPContainer* event, int wait)
 
 	PTP_CNT_INIT(usbevent);
 
-	if ((params==NULL) || (event==NULL))
+	if ((params==NULL) || (event==NULL)) 
 		return PTP_ERROR_BADPARAM;
 
 
@@ -901,7 +901,7 @@ ptp_getdeviceinfo (PTPParams* params, PTPDeviceInfo* deviceinfo)
 /**
  * ptp_opensession:
  * params:	PTPParams*
- * 		session			- session number
+ * 		session			- session number 
  *
  * Establishes a new session.
  *
@@ -920,7 +920,7 @@ ptp_opensession (PTPParams* params, uint32_t session)
 	params->session_id=0x00000000;
 	/* TransactionID should be set to 0 also! */
 	params->transaction_id=0x0000000;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_OpenSession;
 	ptp.Param1=session;
@@ -1113,7 +1113,7 @@ ptp_getthumb (PTPParams* params, uint32_t handle,  char** object)
  * params:	PTPParams*
  *		handle			- object handle
  *		ofc			- object format code (optional)
- *
+ * 
  * Deletes desired objects.
  *
  * Return values: Some PTP_RC_* code.
@@ -1141,7 +1141,7 @@ ptp_deleteobject (PTPParams* params, uint32_t handle,
  *		uint32_t* parenthandle 	- Parent ObjectHandle on responder
  * 		uint32_t* handle	- see Return values
  *		PTPObjectInfo* objectinfo- ObjectInfo that is to be sent
- *
+ * 
  * Sends ObjectInfo of file that is to be sent via SendFileObject.
  *
  * Return values: Some PTP_RC_* code.
@@ -1153,7 +1153,7 @@ ptp_deleteobject (PTPParams* params, uint32_t handle,
  *					  for the incoming object
  **/
 uint16_t
-ptp_sendobjectinfo (PTPParams* params, uint32_t* store,
+ptp_sendobjectinfo (PTPParams* params, uint32_t* store, 
 			uint32_t* parenthandle, uint32_t* handle,
 			PTPObjectInfo* objectinfo)
 {
@@ -1162,7 +1162,7 @@ ptp_sendobjectinfo (PTPParams* params, uint32_t* store,
 	char* oidata=NULL;
 	uint32_t size;
 
-	ptp_debug(params,"PTP: Sending ObjectInfo; parent object 0x%08x",
+	ptp_debug(params,"PTP: Sending ObjectInfo; parent object 0x%08x", 
 		*parenthandle);
 
 	PTP_CNT_INIT(ptp);
@@ -1170,13 +1170,13 @@ ptp_sendobjectinfo (PTPParams* params, uint32_t* store,
 	ptp.Param1=*store;
 	ptp.Param2=*parenthandle;
 	ptp.Nparam=2;
-
+	
 	size=ptp_pack_OI(params, objectinfo, &oidata);
-	ret=ptp_transaction(params, &ptp, PTP_DP_SENDDATA, size, &oidata);
+	ret=ptp_transaction(params, &ptp, PTP_DP_SENDDATA, size, &oidata); 
 	free(oidata);
 	*store=ptp.Param1;
 	*parenthandle=ptp.Param2;
-	*handle=ptp.Param3;
+	*handle=ptp.Param3; 
 	return ret;
 }
 
@@ -1185,7 +1185,7 @@ ptp_sendobjectinfo (PTPParams* params, uint32_t* store,
  * params:	PTPParams*
  *		char*	object		- contains the object that is to be sent
  *		uint32_t size		- object size
- *
+ *		
  * Sends object to Responder.
  *
  * Return values: Some PTP_RC_* code.
@@ -1212,7 +1212,7 @@ ptp_sendobject (PTPParams* params, char* object, uint32_t size)
  * params:	PTPParams*
  *		storageid		- destination StorageID on Responder
  *		ofc			- object format code
- *
+ * 
  * Causes device to initiate the capture of one or more new data objects
  * according to its current device properties, storing the data into store
  * indicated by storageid. If storageid is 0x00000000, the object(s) will
@@ -1239,7 +1239,7 @@ ptp_initiatecapture (PTPParams* params, uint32_t storageid,
 }
 
 uint16_t
-ptp_getdevicepropdesc (PTPParams* params, uint16_t propcode,
+ptp_getdevicepropdesc (PTPParams* params, uint16_t propcode, 
 			PTPDevicePropDesc* devicepropertydesc)
 {
 	PTPContainer ptp;
@@ -1300,115 +1300,7 @@ ptp_setdevicepropvalue (PTPParams* params, uint16_t propcode,
 	return ret;
 }
 
-static void ptp_params_to_array(PTPContainer *ptp, uint32_t *params)
-{
-	params[0] = ptp->Param1;
-	params[1] = ptp->Param2;
-	params[2] = ptp->Param3;
-	params[3] = ptp->Param4;
-	params[4] = ptp->Param5;
-}
-
-static void ptp_array_to_params(PTPContainer *ptp, uint32_t *params)
-{
-	ptp->Param1 = params[0];
-	ptp->Param2 = params[1];
-	ptp->Param3 = params[2];
-	ptp->Param4 = params[3];
-	ptp->Param5 = params[4];
-}
-
-
-/*
-arbitrary transaction that doesn't send or receive data
-Returns PTP_RC_* code
-On success *nparams contains the number of return params, and trans_params contains the values
-*/
-uint16_t
-ptp_txn_nodata (PTPParams* params, uint16_t opcode, uint32_t *txn_params, int *nparams)
-{
-	PTPContainer ptp;
-
-	PTP_CNT_INIT(ptp);
-	ptp.Code=opcode;
-	ptp.Nparam=*nparams;
-	ptp_array_to_params(&ptp,txn_params);
-
-	uint16_t ret;
-	ret = ptp_transaction(params, &ptp, PTP_DP_NODATA, 0, NULL);
-	if (ret != PTP_RC_OK) {
-		*nparams = 0;
-		return ret;
-	}
-	*nparams = ptp.Nparam;
-	ptp_params_to_array(&ptp,txn_params);
-	return PTP_RC_OK;
-}
-
-/*
-arbitrary transaction that sends data
-Returns PTP_RC_* code
-On success *nparams contains the number of return params, and trans_params contains the values
-*/
-uint16_t
-ptp_txn_senddata (PTPParams* params, uint16_t opcode, uint32_t *txn_params, int *nparams, char *data, unsigned data_size)
-{
-	PTPContainer ptp;
-
-	PTP_CNT_INIT(ptp);
-	ptp.Code=opcode;
-	ptp.Nparam=*nparams;
-	ptp_array_to_params(&ptp,txn_params);
-
-	uint16_t ret;
-	ret = ptp_transaction(params, &ptp, PTP_DP_SENDDATA, data_size, &data);
-	if (ret != PTP_RC_OK) {
-		*nparams = 0;
-		return ret;
-	}
-	*nparams = ptp.Nparam;
-	ptp_params_to_array(&ptp,txn_params);
-	return PTP_RC_OK;
-}
-
-/*
-arbitrary transaction that recieves data
-Returns PTP_RC_* code
-On success *data point to returned data, *data_size contains length
-*nparams contains the number of return params, and trans_params contains the values
-data must be freed by caller
-*/
-uint16_t
-ptp_txn_getdata (PTPParams* params, uint16_t opcode, uint32_t *txn_params, int *nparams, char **data, unsigned *data_size)
-{
-	PTPContainer ptp;
-	PTPGetdataParams gdparams;
-
-	*data = NULL;
-	*data_size = 0;
-
-	PTP_CNT_INIT(ptp);
-	ptp.Code=opcode;
-	ptp.Nparam=*nparams;
-	ptp_array_to_params(&ptp,txn_params);
-
-	uint16_t ret;
-	PTP_CNT_INIT(gdparams);
-	gdparams.handler = NULL;
-	gdparams.block_size = 0; // default
-	gdparams.handler_data = NULL;
-	ret=ptp_getdata_transaction(params, &ptp, &gdparams);
-	if ( ret == PTP_RC_OK ) {
-		*data = gdparams.ret_data;
-		*data_size = (unsigned)(gdparams.total_size);
-		*nparams = ptp.Nparam;
-		ptp_params_to_array(&ptp,txn_params);
-	}
-	return ret;
-}
-
-
-// other canon extensions not used now, may be useful later ?
+// canon extensions not used now, may be useful later ?
 #if 0
 uint16_t/*************************************************************************
  *
@@ -1425,7 +1317,7 @@ uint16_t/***********************************************************************
  *		uint32_t handle		- ObjectHandle
  *		uint32_t p2 		- Yet unknown parameter,
  *					  value 0 works.
- *
+ * 
  * Gets form the responder the size of the specified object.
  *
  * Return values: Some PTP_RC_* code.
@@ -1433,12 +1325,12 @@ uint16_t/***********************************************************************
  *		  uint32_t  rp2		- Yet unknown parameter
  *
  **/
-ptp_canon_getobjectsize (PTPParams* params, uint32_t handle, uint32_t p2,
-			uint32_t* size, uint32_t* rp2)
+ptp_canon_getobjectsize (PTPParams* params, uint32_t handle, uint32_t p2, 
+			uint32_t* size, uint32_t* rp2) 
 {
 	uint16_t ret;
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_GetObjectSize;
 	ptp.Param1=handle;
@@ -1453,7 +1345,7 @@ ptp_canon_getobjectsize (PTPParams* params, uint32_t handle, uint32_t p2,
 /**
  * ptp_canon_startshootingmode:
  * params:	PTPParams*
- *
+ * 
  * Starts shooting session. It emits a StorageInfoChanged
  * event via the interrupt pipe and pushes the StorageInfoChanged
  * and CANON_CameraModeChange events onto the event stack
@@ -1466,7 +1358,7 @@ uint16_t
 ptp_canon_startshootingmode (PTPParams* params)
 {
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_StartShootingMode;
 	ptp.Nparam=0;
@@ -1476,9 +1368,9 @@ ptp_canon_startshootingmode (PTPParams* params)
 /**
  * ptp_canon_endshootingmode:
  * params:	PTPParams*
- *
- * This operation is observed after pressing the Disconnect
- * button on the Remote Capture app. It emits a StorageInfoChanged
+ * 
+ * This operation is observed after pressing the Disconnect 
+ * button on the Remote Capture app. It emits a StorageInfoChanged 
  * event via the interrupt pipe and pushes the StorageInfoChanged
  * and CANON_CameraModeChange events onto the event stack
  * (see operation PTP_OC_CANON_CheckEvent).
@@ -1490,7 +1382,7 @@ uint16_t
 ptp_canon_endshootingmode (PTPParams* params)
 {
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_EndShootingMode;
 	ptp.Nparam=0;
@@ -1500,7 +1392,7 @@ ptp_canon_endshootingmode (PTPParams* params)
 /**
  * ptp_canon_viewfinderon:
  * params:	PTPParams*
- *
+ * 
  * Prior to start reading viewfinder images, one  must call this operation.
  * Supposedly, this operation affects the value of the CANON_ViewfinderMode
  * property.
@@ -1512,7 +1404,7 @@ uint16_t
 ptp_canon_viewfinderon (PTPParams* params)
 {
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_ViewfinderOn;
 	ptp.Nparam=0;
@@ -1522,7 +1414,7 @@ ptp_canon_viewfinderon (PTPParams* params)
 /**
  * ptp_canon_viewfinderoff:
  * params:	PTPParams*
- *
+ * 
  * Before changing the shooting mode, or when one doesn't need to read
  * viewfinder images any more, one must call this operation.
  * Supposedly, this operation affects the value of the CANON_ViewfinderMode
@@ -1535,7 +1427,7 @@ uint16_t
 ptp_canon_viewfinderoff (PTPParams* params)
 {
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_ViewfinderOff;
 	ptp.Nparam=0;
@@ -1547,7 +1439,7 @@ ptp_canon_viewfinderoff (PTPParams* params)
  * params:	PTPParams*
  * 		uint32_t p1 	- Yet unknown parameter,
  * 				  value 7 works
- *
+ * 
  * Make viewfinder reflect changes.
  * There is a button for this operation in the Remote Capture app.
  * What it does exactly I don't know. This operation is followed
@@ -1560,7 +1452,7 @@ uint16_t
 ptp_canon_reflectchanges (PTPParams* params, uint32_t p1)
 {
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_ReflectChanges;
 	ptp.Param1=p1;
@@ -1572,7 +1464,7 @@ ptp_canon_reflectchanges (PTPParams* params, uint32_t p1)
 /**
  * ptp_canon_checkevent:
  * params:	PTPParams*
- *
+ * 
  * The camera has a FIFO stack, in which it accumulates events.
  * Partially these events are communicated also via the USB interrupt pipe
  * according to the PTP USB specification, partially not.
@@ -1580,7 +1472,7 @@ ptp_canon_reflectchanges (PTPParams* params, uint32_t p1)
  * if the event stack is empty, or filled with an event's data otherwise.
  * The event is removed from the stack in the latter case.
  * The Remote Capture app sends this command to the camera all the time
- * of connection, filling with it the gaps between other operations.
+ * of connection, filling with it the gaps between other operations. 
  *
  * Return values: Some PTP_RC_* code.
  * Upon success : PTPUSBEventContainer* event	- is filled with the event data
@@ -1594,7 +1486,7 @@ ptp_canon_checkevent (PTPParams* params, PTPUSBEventContainer* event, int* iseve
 	uint16_t ret;
 	PTPContainer ptp;
 	char *evdata = NULL;
-
+	
 	*isevent=0;
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_CheckEvent;
@@ -1615,8 +1507,8 @@ ptp_canon_checkevent (PTPParams* params, PTPUSBEventContainer* event, int* iseve
  * ptp_canon_focuslock:
  *
  * This operation locks the focus. It is followed by the CANON_GetChanges(?)
- * operation in the log.
- * It affects the CANON_MacroMode property.
+ * operation in the log. 
+ * It affects the CANON_MacroMode property. 
  *
  * params:	PTPParams*
  *
@@ -1627,7 +1519,7 @@ uint16_t
 ptp_canon_focuslock (PTPParams* params)
 {
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_FocusLock;
 	ptp.Nparam=0;
@@ -1638,9 +1530,9 @@ ptp_canon_focuslock (PTPParams* params)
  * ptp_canon_focusunlock:
  *
  * This operation unlocks the focus. It is followed by the CANON_GetChanges(?)
- * operation in the log.
+ * operation in the log. 
  * It sets the CANON_MacroMode property value to 1 (where it occurs in the log).
- *
+ * 
  * params:	PTPParams*
  *
  * Return values: Some PTP_RC_* code.
@@ -1650,7 +1542,7 @@ uint16_t
 ptp_canon_focusunlock (PTPParams* params)
 {
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_FocusUnlock;
 	ptp.Nparam=0;
@@ -1659,7 +1551,7 @@ ptp_canon_focusunlock (PTPParams* params)
 
 /**
  * ptp_canon_initiatecaptureinmemory:
- *
+ * 
  * This operation starts the image capture according to the current camera
  * settings. When the capture has happened, the camera emits a CaptureComplete
  * event via the interrupt pipe and pushes the CANON_RequestObjectTransfer,
@@ -1678,7 +1570,7 @@ uint16_t
 ptp_canon_initiatecaptureinmemory (PTPParams* params)
 {
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_InitiateCaptureInMemory;
 	ptp.Nparam=0;
@@ -1688,7 +1580,7 @@ ptp_canon_initiatecaptureinmemory (PTPParams* params)
 /**
  * ptp_canon_getpartialobject:
  *
- * This operation is used to read from the device a data
+ * This operation is used to read from the device a data 
  * block of an object from a specified offset.
  *
  * params:	PTPParams*
@@ -1704,15 +1596,15 @@ ptp_canon_initiatecaptureinmemory (PTPParams* params)
  *
  **/
 uint16_t
-ptp_canon_getpartialobject (PTPParams* params, uint32_t handle,
+ptp_canon_getpartialobject (PTPParams* params, uint32_t handle, 
 				uint32_t offset, uint32_t size,
-				uint32_t pos, char** block,
+				uint32_t pos, char** block, 
 				uint32_t* readnum)
 {
 	uint16_t ret;
 	PTPContainer ptp;
 	char *data=NULL;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_GetPartialObject;
 	ptp.Param1=handle;
@@ -1736,9 +1628,9 @@ ptp_canon_getpartialobject (PTPParams* params, uint32_t handle,
  * Of course, prior to calling this operation, one must turn the viewfinder
  * on with the CANON_ViewfinderOn command.
  * Invoking this operation many times, one can get live video from the camera!
- *
+ * 
  * params:	PTPParams*
- *
+ * 
  * Return values: Some PTP_RC_* code.
  *      char **image - the pointer to the read image
  *      unit32_t *size - the size of the image in bytes
@@ -1749,7 +1641,7 @@ ptp_canon_getviewfinderimage (PTPParams* params, char** image, uint32_t* size)
 {
 	uint16_t ret;
 	PTPContainer ptp;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_GetViewfinderImage;
 	ptp.Nparam=0;
@@ -1762,14 +1654,14 @@ ptp_canon_getviewfinderimage (PTPParams* params, char** image, uint32_t* size)
  * ptp_canon_getchanges:
  *
  * This is an interesting operation, about the effect of which I am not sure.
- * This command is called every time when a device property has been changed
+ * This command is called every time when a device property has been changed 
  * with the SetDevicePropValue operation, and after some other operations.
  * This operation reads the array of Device Properties which have been changed
  * by the previous operation.
  * Probably, this operation is even required to make those changes work.
  *
  * params:	PTPParams*
- *
+ * 
  * Return values: Some PTP_RC_* code.
  *      uint16_t** props - the pointer to the array of changed properties
  *      uint32_t* propnum - the number of elements in the *props array
@@ -1781,7 +1673,7 @@ ptp_canon_getchanges (PTPParams* params, uint16_t** props, uint32_t* propnum)
 	uint16_t ret;
 	PTPContainer ptp;
 	char* data=NULL;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_GetChanges;
 	ptp.Nparam=0;
@@ -1797,17 +1689,17 @@ ptp_canon_getchanges (PTPParams* params, uint16_t** props, uint32_t* propnum)
  *
  * This command reads a specified object's record in a device's filesystem,
  * or the records of all objects belonging to a specified folder (association).
- *
+ *  
  * params:	PTPParams*
  *      uint32_t store - StorageID,
  *      uint32_t p2 - Yet unknown (0 value works OK)
  *      uint32_t parent - Parent Object Handle
- *                      # If Parent Object Handle is 0xffffffff,
+ *                      # If Parent Object Handle is 0xffffffff, 
  *                      # the Parent Object is the top level folder.
  *      uint32_t handle - Object Handle
- *                      # If Object Handle is 0, the records of all objects
+ *                      # If Object Handle is 0, the records of all objects 
  *                      # belonging to the Parent Object are read.
- *                      # If Object Handle is not 0, only the record of this
+ *                      # If Object Handle is not 0, only the record of this 
  *                      # Object is read.
  *
  * Return values: Some PTP_RC_* code.
@@ -1816,14 +1708,14 @@ ptp_canon_getchanges (PTPParams* params, uint16_t** props, uint32_t* propnum)
  *
  **/
 uint16_t
-ptp_canon_getfolderentries (PTPParams* params, uint32_t store, uint32_t p2,
-			    uint32_t parent, uint32_t handle,
+ptp_canon_getfolderentries (PTPParams* params, uint32_t store, uint32_t p2, 
+			    uint32_t parent, uint32_t handle, 
 			    PTPCANONFolderEntry** entries, uint32_t* entnum)
 {
 	uint16_t ret;
 	PTPContainer ptp;
 	char *data = NULL;
-
+	
 	PTP_CNT_INIT(ptp);
 	ptp.Code=PTP_OC_CANON_GetFolderEntries;
 	ptp.Param1=store;
@@ -1888,6 +1780,72 @@ ptp_free_devicepropdesc(PTPDevicePropDesc* dpd)
 	}
 }
 
+#define PTP_ERROR_DEF(name,desc) {PTP_##name,#name,desc}
+static PTPErrorDef ptp_errors[] = {
+	PTP_ERROR_DEF(RC_Undefined, 		N_("Undefined Error")),
+	PTP_ERROR_DEF(RC_OK, 			N_("OK!")),
+	PTP_ERROR_DEF(RC_GeneralError, 		N_("General Error")),
+	PTP_ERROR_DEF(RC_SessionNotOpen, 	N_("Session Not Open")),
+	PTP_ERROR_DEF(RC_InvalidTransactionID, 	N_("Invalid Transaction ID")),
+	PTP_ERROR_DEF(RC_OperationNotSupported, 	N_("Operation Not Supported")),
+	PTP_ERROR_DEF(RC_ParameterNotSupported, 	N_("Parameter Not Supported")),
+	PTP_ERROR_DEF(RC_IncompleteTransfer, 	N_("Incomplete Transfer")),
+	PTP_ERROR_DEF(RC_InvalidStorageId, 	N_("Invalid Storage ID")),
+	PTP_ERROR_DEF(RC_InvalidObjectHandle, 	N_("Invalid Object Handle")),
+	PTP_ERROR_DEF(RC_DevicePropNotSupported, N_("Device Prop Not Supported")),
+	PTP_ERROR_DEF(RC_InvalidObjectFormatCode, N_("Invalid Object Format Code")),
+	PTP_ERROR_DEF(RC_StoreFull, 		N_("Store Full")),
+	PTP_ERROR_DEF(RC_ObjectWriteProtected, 	N_("Object Write Protected")),
+	PTP_ERROR_DEF(RC_StoreReadOnly, 		N_("Store Read Only")),
+	PTP_ERROR_DEF(RC_AccessDenied,		N_("Access Denied")),
+	PTP_ERROR_DEF(RC_NoThumbnailPresent, 	N_("No Thumbnail Present")),
+	PTP_ERROR_DEF(RC_SelfTestFailed, 	N_("Self Test Failed")),
+	PTP_ERROR_DEF(RC_PartialDeletion, 	N_("Partial Deletion")),
+	PTP_ERROR_DEF(RC_StoreNotAvailable, 	N_("Store Not Available")),
+	PTP_ERROR_DEF(RC_SpecificationByFormatUnsupported, N_("Specification By Format Unsupported")),
+	PTP_ERROR_DEF(RC_NoValidObjectInfo, 	N_("No Valid Object Info")),
+	PTP_ERROR_DEF(RC_InvalidCodeFormat, 	N_("Invalid Code Format")),
+	PTP_ERROR_DEF(RC_UnknownVendorCode, 	N_("Unknown Vendor Code")),
+	PTP_ERROR_DEF(RC_CaptureAlreadyTerminated, N_("Capture Already Terminated")),
+	PTP_ERROR_DEF(RC_DeviceBusy, 		N_("Device Busy")),
+	PTP_ERROR_DEF(RC_InvalidParentObject, 	N_("Invalid Parent Object")),
+	PTP_ERROR_DEF(RC_InvalidDevicePropFormat, N_("Invalid Device Prop Format")),
+	PTP_ERROR_DEF(RC_InvalidDevicePropValue, N_("Invalid Device Prop Value")),
+	PTP_ERROR_DEF(RC_InvalidParameter, 	N_("Invalid Parameter")),
+	PTP_ERROR_DEF(RC_SessionAlreadyOpened, 	N_("Session Already Opened")),
+	PTP_ERROR_DEF(RC_TransactionCanceled, 	N_("Transaction Canceled")),
+	PTP_ERROR_DEF(RC_SpecificationOfDestinationUnsupported, N_("Specification Of Destination Unsupported")),
+	PTP_ERROR_DEF(ERROR_IO,		  N_("I/O error")),
+	PTP_ERROR_DEF(ERROR_BADPARAM,	  N_("bad parameter")),
+	PTP_ERROR_DEF(ERROR_DATA_EXPECTED, N_("Protocol error: data expected")),
+	PTP_ERROR_DEF(ERROR_RESP_EXPECTED, N_("Protocol error: response expected")),
+	PTP_ERROR_DEF(ERROR_NOT_CONNECTED, N_("not connected")),
+};
+
+#define PTP_NUM_ERROR_CODES (sizeof(ptp_errors)/sizeof(PTPErrorDef))
+
+const PTPErrorDef *ptp_get_error_by_code(uint16_t error) {
+	int i;
+	for (i=0; i<PTP_NUM_ERROR_CODES; i++) {
+		if (ptp_errors[i].error == error){
+			return &ptp_errors[i];
+		}
+	}
+	return &ptp_errors[0];
+}
+
+const PTPErrorDef *ptp_get_error_by_index(unsigned i) {
+	if(i < PTP_NUM_ERROR_CODES) {
+		return &ptp_errors[i];
+	}
+	return NULL;
+}
+
+/* report PTP errors */
+const char *ptp_strerror(uint16_t error) {
+	return ptp_get_error_by_code(error)->txt;
+}
+
 /* return DataType description */
 
 const char*
@@ -1931,6 +1889,116 @@ ptp_get_datatype_name(PTPParams* params, uint16_t dt)
 
 	return NULL;
 }
+
+/* return ptp operation name */
+
+const char*
+ptp_get_operation_name(PTPParams* params, uint16_t oc)
+{
+	int i;
+	/* Operation Codes */
+	static struct {
+		uint16_t oc;
+		const char *txt;
+	} ptp_operations[] = {
+		{PTP_OC_Undefined,		N_("UndefinedOperation")},
+		{PTP_OC_GetDeviceInfo,		N_("GetDeviceInfo")},
+		{PTP_OC_OpenSession,		N_("OpenSession")},
+		{PTP_OC_CloseSession,		N_("CloseSession")},
+		{PTP_OC_GetStorageIDs,		N_("GetStorageIDs")},
+		{PTP_OC_GetStorageInfo,		N_("GetStorageInfo")},
+		{PTP_OC_GetNumObjects,		N_("GetNumObjects")},
+		{PTP_OC_GetObjectHandles,	N_("GetObjectHandles")},
+		{PTP_OC_GetObjectInfo,		N_("GetObjectInfo")},
+		{PTP_OC_GetObject,		N_("GetObject")},
+		{PTP_OC_GetThumb,		N_("GetThumb")},
+		{PTP_OC_DeleteObject,		N_("DeleteObject")},
+		{PTP_OC_SendObjectInfo,		N_("SendObjectInfo")},
+		{PTP_OC_SendObject,		N_("SendObject")},
+		{PTP_OC_InitiateCapture,	N_("InitiateCapture")},
+		{PTP_OC_FormatStore,		N_("FormatStore")},
+		{PTP_OC_ResetDevice,		N_("ResetDevice")},
+		{PTP_OC_SelfTest,		N_("SelfTest")},
+		{PTP_OC_SetObjectProtection,	N_("SetObjectProtection")},
+		{PTP_OC_PowerDown,		N_("PowerDown")},
+		{PTP_OC_GetDevicePropDesc,	N_("GetDevicePropDesc")},
+		{PTP_OC_GetDevicePropValue,	N_("GetDevicePropValue")},
+		{PTP_OC_SetDevicePropValue,	N_("SetDevicePropValue")},
+		{PTP_OC_ResetDevicePropValue,	N_("ResetDevicePropValue")},
+		{PTP_OC_TerminateOpenCapture,	N_("TerminateOpenCapture")},
+		{PTP_OC_MoveObject,		N_("MoveObject")},
+		{PTP_OC_CopyObject,		N_("CopyObject")},
+		{PTP_OC_GetPartialObject,	N_("GetPartialObject")},
+		{PTP_OC_InitiateOpenCapture,	N_("InitiateOpenCapture")},
+		{0,NULL}
+	};
+	static struct {
+		uint16_t oc;
+		const char *txt;
+	} ptp_operations_EK[] = {
+		{PTP_OC_EK_SendFileObjectInfo,	N_("EK SendFileObjectInfo")},
+		{PTP_OC_EK_SendFileObject,	N_("EK SendFileObject")},
+		{0,NULL}
+	};
+	static struct {
+		uint16_t oc;
+		const char *txt;
+	} ptp_operations_CANON[] = {
+		{PTP_OC_CANON_GetObjectSize,	N_("CANON GetObjectSize")},
+		{PTP_OC_CANON_StartShootingMode,N_("CANON StartShootingMode")},
+		{PTP_OC_CANON_EndShootingMode,	N_("CANON EndShootingMode")},
+		{PTP_OC_CANON_ViewfinderOn,	N_("CANON ViewfinderOn")},
+		{PTP_OC_CANON_ViewfinderOff,	N_("CANON ViewfinderOff")},
+		{PTP_OC_CANON_ReflectChanges,	N_("CANON ReflectChanges")},
+		{PTP_OC_CANON_CheckEvent,	N_("CANON CheckEvent")},
+		{PTP_OC_CANON_FocusLock,	N_("CANON FocusLock")},
+		{PTP_OC_CANON_FocusUnlock,	N_("CANON FocusUnlock")},
+		{PTP_OC_CANON_InitiateCaptureInMemory,
+					N_("CANON InitiateCaptureInMemory")},
+		{PTP_OC_CANON_GetPartialObject,	N_("CANON GetPartialObject")},
+		{PTP_OC_CANON_GetViewfinderImage,
+					N_("CANON GetViewfinderImage")},
+		{PTP_OC_CANON_GetChanges,	N_("CANON GetChanges")},
+		{PTP_OC_CANON_GetFolderEntries,	N_("CANON GetFolderEntries")},
+		{0,NULL}
+	};
+	static struct {
+		uint16_t oc;
+		const char *txt;
+	} ptp_operations_NIKON[] = {
+		{PTP_OC_NIKON_DirectCapture,	N_("NIKON DirectCapture")},
+		{PTP_OC_NIKON_SetControlMode,	N_("NIKON SetControlMode")},
+		{PTP_OC_NIKON_CheckEvent,	N_("NIKON Check Event")},
+		{PTP_OC_NIKON_KeepAlive,	N_("NIKON Keep Alive (?)")},
+		{0,NULL}
+	};
+
+	switch (params->deviceinfo.VendorExtensionID) {
+		case PTP_VENDOR_EASTMAN_KODAK:
+			for (i=0; ptp_operations_EK[i].txt!=NULL; i++)
+				if (ptp_operations_EK[i].oc==oc)
+					return (ptp_operations_EK[i].txt);
+			break;
+
+		case PTP_VENDOR_CANON:
+			for (i=0; ptp_operations_CANON[i].txt!=NULL; i++)
+				if (ptp_operations_CANON[i].oc==oc)
+					return (ptp_operations_CANON[i].txt);
+			break;
+		case PTP_VENDOR_NIKON:
+			for (i=0; ptp_operations_NIKON[i].txt!=NULL; i++)
+				if (ptp_operations_NIKON[i].oc==oc)
+					return (ptp_operations_NIKON[i].txt);
+			break;
+		}
+	for (i=0; ptp_operations[i].txt!=NULL; i++)
+		if (ptp_operations[i].oc == oc){
+			return (ptp_operations[i].txt);
+		}
+
+	return NULL;
+}
+
 
 /****** CHDK interface ******/
 uint16_t ptp_chdk_get_memory(PTPParams* params, int start, int num, int flags, char **buf)
@@ -1994,59 +2062,17 @@ uint16_t ptp_chdk_upload(PTPParams* params, char *local_fn, char *remote_fn)
   file_name_len = strlen(remote_fn);
   data_len = 4 + file_name_len + file_len;
   buf = malloc(data_len);
-  if( buf == NULL )
-  {
-    fclose(f);
-    return PTP_ERROR_NOMEM;
-  }
   memcpy(buf,&file_name_len,4);
   memcpy(buf+4,remote_fn,file_name_len);
-  size_t count = fread(buf+4+file_name_len,1,file_len,f);
+  fread(buf+4+file_name_len,1,file_len,f);
 
   fclose(f);
-
-  if(count != file_len) {
-    free(buf);
-    return PTP_ERROR_IO;
-  }
 
   ret=ptp_transaction(params, &ptp, PTP_DP_SENDDATA, data_len, &buf);
 
   free(buf);
 
   return ret;
-}
-
-uint16_t ptp_chdk_upload_mem(PTPParams* params, char *remote_fn, char *data, unsigned file_len)
-{
-	uint16_t ret;
-	PTPContainer ptp;
-	unsigned data_len,file_name_len;
-	char *buf;
-
-	PTP_CNT_INIT(ptp);
-	ptp.Code=PTP_OC_CHDK;
-	ptp.Nparam=1;
-	ptp.Param1=PTP_CHDK_UploadFile;
-
-	file_name_len = strlen(remote_fn);
-	data_len = 4 + file_name_len + file_len;
-	// TODO entire file data is copied into buf
-	// inefficient, but ptp_transaction wants one buf
-	buf = malloc(data_len);
-	if( buf == NULL )
-	{
-		return PTP_ERROR_NOMEM;
-	}
-	memcpy(buf,&file_name_len,4);
-	memcpy(buf+4,remote_fn,file_name_len);
-	memcpy(buf+4+file_name_len,data,file_len);
-
-	ret=ptp_transaction(params, &ptp, PTP_DP_SENDDATA, data_len, &buf);
-
-	free(buf);
-
-	return ret;
 }
 
 static uint16_t gd_to_file(PTPParams* params, PTPGetdataParams *gdparams, unsigned len, unsigned char *bytes) {
@@ -2096,45 +2122,6 @@ uint16_t ptp_chdk_download(PTPParams* params, char *remote_fn, char *local_fn)
   ret=ptp_getdata_transaction(params, &ptp, &gdparams);
   fclose(f);
   return ret;
-}
-
-uint16_t ptp_chdk_download_mem(PTPParams* params, char *remote_fn, char **data, unsigned *data_size)
-{
-	uint16_t ret;
-	PTPContainer ptp;
-	PTPGetdataParams gdparams;
-
-	*data = NULL;
-	*data_size = 0;
-
-	PTP_CNT_INIT(ptp);
-	ptp.Code=PTP_OC_CHDK;
-	ptp.Nparam=2;
-	ptp.Param1=PTP_CHDK_TempData;
-	ptp.Param2=0;
-	ret=ptp_transaction(params, &ptp, PTP_DP_SENDDATA, strlen(remote_fn), &remote_fn);
-	if ( ret != PTP_RC_OK )
-	{
-		return ret;
-	}
-
-	PTP_CNT_INIT(ptp);
-	ptp.Code=PTP_OC_CHDK;
-	ptp.Nparam=1;
-	ptp.Param1=PTP_CHDK_DownloadFile;
-
-	PTP_CNT_INIT(gdparams);
-
-	gdparams.handler = NULL;
-	gdparams.block_size = 0; // default
-	gdparams.handler_data = NULL;
-	ret=ptp_getdata_transaction(params, &ptp, &gdparams);
-	if ( ret == PTP_RC_OK ) {
-		*data = gdparams.ret_data;
-		*data_size = (unsigned)(gdparams.total_size);
-	}
-
-	return ret;
 }
 
 /*

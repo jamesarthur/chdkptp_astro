@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2023 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2017 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,7 +11,8 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 --]]
 --[[
 utilities for dealing with CHDK DNG images and headers
@@ -19,7 +20,6 @@ this is not a fully featured TIFF/TIFF-EP/DNG reader
 ]]
 local m={}
 local lbu=require'lbufutil'
-local histoutil=require'histoutil'
 --[[
 bind the tiff header
 --]]
@@ -126,7 +126,7 @@ m.tag_types = {
 	{name='SBYTE',size=1,signed=true},
 	{name='UNDEFINED',size=1},
 	{name='SSHORT',size=2,signed=true},
-	{name='SLONG',size=4,signed=true},
+	{name='SSLONG',size=4,signed=true},
 	{name='SRATIONAL',size=8,elsize=4,signed=true,rational=true},
 	{name='FLOAT',size=4,float=true},
 	{name='DOUBLE',size=8,float=true},
@@ -185,7 +185,7 @@ local ifd_entry_methods = {
 		local vdesc
 		if self:is_inline() then
 			vdesc = ' value'
-		else
+		else 
 			vdesc = 'offset'
 		end
 		return string.format('%-30s tag=0x%04x type=%-10s count=%07d %s=0x%08x',
@@ -199,7 +199,7 @@ local ifd_entry_methods = {
 	--[[
 	return the offset of the data within the lbuf, either inline in the ifd entry or in body
 	]]
-	get_data_off = function(self)
+	get_data_off = function(self) 
 		if self:is_inline() then
 			return self.off + 8 -- short tag + short type + long count
 		else
@@ -530,7 +530,7 @@ function dng_methods.print_ifd(self,ifd,opts)
 	opts.depth = opts.depth-1
 end
 
-function m.cfa_bytes_to_str(cfa_bytes)
+function m.cfa_bytes_to_str(cfa_bytes) 
 	local cfa={cfa_bytes:byte(1,-1)}
 	local r = ''
 	for i,v in ipairs(cfa) do
@@ -566,7 +566,7 @@ function dng_methods.print_header(self)
 end
 function dng_methods.print_info(self)
 	self:print_header()
-	for i, ifd in ipairs(self.ifds) do
+	for i, ifd in ipairs(self.ifds) do 
 		self:print_ifd(ifd,{recurse=true})
 	end
 end
@@ -591,7 +591,11 @@ function dng_methods.build_histogram(self,opts)
 		bottom=ifd.byname.ActiveArea:getel(2),
 		right=ifd.byname.ActiveArea:getel(3),
 	},opts);
-	local h=histoutil.new_histo(self:max_value()+1)
+	local h={}
+	for i=0,self:max_value() do
+		h[i]=0
+	end
+	local total = 0
 	local img=self.img
 	for y = opts.top, opts.bottom-1 do
 		for x = opts.left, opts.right-1 do
@@ -631,7 +635,7 @@ function dng_methods.dump_image(self,dst,opts)
 	-- hack to default 16 bit pgm to big endian if not specified
 	-- per http://netpbm.sourceforge.net/doc/pamendian.html is the correct format,
 	-- but allow little endian to be forced if someone wants it
-	if not opts.endian then
+	if not opts.endian then 
 		if opts.pgm and opts.bpp == 16 then
 			opts.endian = 'big'
 		else
@@ -757,7 +761,7 @@ order is only for testing external data in little endian format
 function dng_methods.set_data(self,data,offset,order)
 	-- TODO makes assumptions about header layout
 	local ifd=self.raw_ifd
-	if not ifd then
+	if not ifd then 
 		error('ifd 0.0 not found')
 	end
 

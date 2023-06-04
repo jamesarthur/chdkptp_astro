@@ -29,7 +29,7 @@ You may need to make permission changes to allow users other than root to open
 the USB device. See INSTALL.TXT for more information.
 
 You may also encounter problems if default software (gphoto etc) accesses
-the camera when the USB is connected. This problem typically causes
+the camera when the USB is connected. This problem typically causes 
 the camera screen to go black on connection, and prevents switching to
 shooting mode. See INSTALL.TXT for more information.
 
@@ -55,36 +55,24 @@ spaces, they must be quoted.
 
 ==Startup files==
 Startup files can be used to automatically execute CLI commands at startup.
-Using the exec command, you may also execute arbitrary Lua.
+Using the exec command, you may also execute arbitrary lua.
 
 Startup files are processed before any -e or -c options
 
 If the -r command line option is used, it is treated as the full name of the
-file, and the default files are ignored.  If -r is given without a filename,
-no startup file is used.
+file, and the default files are ignored. If -r is given without a filename,
+no startup file is used. 
 
 If -r is not used, CHDKPTP checks for startup files using the CHDKPTP_HOME
 environment variable, or if that is not set, <home>/.chdkptp on
-Linux or <home>/_chdkptp on Windows. On Linux, <home> is the value of the
-HOME environment variable. On windows, it's the value of HOME, or
+Linux or <home>/_chdkptp on Windows. On Linux, <home> is the value of the 
+HOME environment variable. On windows, it's the value of HOME, or 
 USERPROFILE if HOME is not set.
 
-By default, chdkptp check for and executes two files: an "autosave" file and
-and "user" file, in order.
+user.chdkptp is the default startup file in CLI or batch mode.
 
-In CLI or GUI mode, if config_autosave is set, the autosave file is written
-on program exit, saving the current settings. To save settings in batch mode,
-use the cfgsave command. When -r is used, config_autosave defaults to false.
-
-In CLI or batch mode, the files are user.chdkptp and autosave.chdkptp
-
-In GUI mode, the files are user_gui.chdkptp and autosave_gui.chdkptp
-
-GUI startup files are run after the GUI module is loaded, but before the GUI is
-started. This means that Lua code loaded from a startup file cannot directly
-interact with GUI elements. However, it can override functions in the GUI module
-to accomplish this.
-
+user_gui.chdkptp is the default startup file in GUI mode. This is run after
+the gui module is loaded, but before the GUI is started.
 
 ==Exit value==
 chdkptp returns 1 if initialization fails or if the last executed CLI command
@@ -97,16 +85,11 @@ from the input prompt or -e command fails.
 =CLI=
 CLI commands are available from the console, GUI and the command line
 
-Many CLI commands have full descriptive name and a short name. The short
+Many CLI commands have full descriptive name and a short name. The short 
 is listed in parenthesis in the command reference below.
 
-Note:
-An '=' immediately following -e is treated as an optional separator. To execute
-camera side Lua from the command line with -e, use the long name 'luar',
-like -e"luar print'hello'" rather than the short name '='
-
 ==CLI syntax==
-The CLI commands lua, luar, exec all accept either a single line of free-form
+The cli commands lua, luar, exec all accept either a single line of free-form
 text or an input file. If the first non-whitespace character is < the
 remaining text is treated as a filename, using the same quoting rules described
 for "word" arguments below. Otherwise, the input is treated treated as Lua
@@ -124,7 +107,7 @@ contain spaces. Inside double quotes "",  backslash \ is treated as an escape
 character.
 
 Some commands accept "substitution strings", in the general form of a name
-and possibly comma separated values enclosed in ${ }. Command specific
+and possibly comma separated values enclosed in ${ }. Command specific 
 substitutions are documented in the command help. Other details
 are covered in the "Substitution strings" section below.
 
@@ -140,24 +123,13 @@ exec (!)     <lua code> | < <filename>: - execute local lua
  The global variable con accesses the current CLI connection.
  Return values are printed in the console.
 
-set          [-v|-c] [-d] [option[=value]]: - show or set option
+set          [-v|-c] [option[=value]]: - show or set option
  Use set with no options to see a list
   -v show description when showing value
   -c output as set command
-  -d reset value to default
-
-cfgsave      [-q] [filename]: - save current settings
- Save current settings to file.
- file: Optional filename to write
-  defaults to startup file autosave.chdkptp or autosave_gui.chdkptp
- -q: quiet
-
-cfgversion   <version>   : - config file compatibility check
- Used in autosaved config files to for compatibility. Not intended for end users
- version: dotted version number, like 1.2.3
 
 quit (q)                 : - quit program
-source       <file>      : - execute CLI commands from file
+source       <file>      : - execute cli commands from file
 lua (.)      <lua code> | < <filename>: - execute remote lua
  Execute Lua code on the camera.
  Returns immediately after the script is started.
@@ -227,8 +199,6 @@ imdl         [options] [src ...]: - download images from the camera
    -imax=n           download images number n or less
    -dmin=n           download images from directory number n or greater
    -dmax=n           download images from directory number n or less
-   -sizemin=n        download images only if file size n or more
-   -sizemax=n        download images only if file size n or less
    -fmatch=<pattern> download only file with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
@@ -283,8 +253,6 @@ imrm         [options] [path ...]: - delete images from the camera
    -imax=n           delete images number n or less
    -dmin=n           delete images from directory number n or greater
    -dmax=n           delete images from directory number n or less
-   -sizemin=n        delete images only if file size n or more
-   -sizemax=n        delete images only if file size n or less
    -fmatch=<pattern> delete only file with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
@@ -304,8 +272,6 @@ imls         [options] [path ...]: - list images on the camera
    -imax=n           list images number n or less
    -dmin=n           list images from directory number n or greater
    -dmax=n           list images from directory number n or less
-   -sizemin=n        list images only if file size n or more
-   -sizemax=n        list images only if file size n or less
    -fmatch=<pattern> list only files with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
@@ -325,8 +291,6 @@ mdownload (mdl) [options] <remote, remote, ...> <target>: - download file/direct
    -fmatch=<pattern> download only file with path/name matching <pattern>
    -dmatch=<pattern> only create directories with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
-   -sizemin=n        only download files if size n or more
-   -sizemax=n        only download files if size n or less
    -nodirs           only create directories needed to download file
    -maxdepth=n       only recurse into N levels of directory
    -pretend          print actions instead of doing them
@@ -372,8 +336,6 @@ delete (rm)  [options] <target, target,...>: - delete file/directories from the 
    -fmatch=<pattern> only delete files with names matching <pattern>
    -dmatch=<pattern> only delete directories with names matching <pattern>
    -rmatch=<pattern> only recurse into directories with names matching <pattern>
-   -sizemin=n        only delete files if size n or more
-   -sizemax=n        only delete files if size n or less
    -nodirs           don't delete directories recursed into, only files
    -maxdepth=n       only recurse into N levels of directory
    -pretend          print actions instead of doing them
@@ -395,11 +357,8 @@ connect (c)  [-nodis] [USB dev spec] | -h=host [-p=port]: - connect to device
   -d=<dev>
   -p=<pid>
   -s=<serial>
-  -v[=<vid>]
   model
-
- <pid> USB product ID, as decimal or hex number.
- <vid> USB vendor ID, as decimal or hex number, default 1193 (Canon). Use -v alone for all
+ <pid> is the USB product ID, as a decimal or hexadecimal number.
  All other values are treated as a Lua pattern, unless -nopat is given.
  If the serial or model are specified, a temporary connection will be made to each device
  If <model> includes spaces, it must be quoted.
@@ -435,31 +394,17 @@ lvdump (dumpframes) [options] [file]: - dump camera display frames to file
    -nopal     don't get palette for ui overlay
    -quiet     don't print progress
 
-lvdumpimg    [options]   : - dump camera display frames to images
+lvdumpimg    [options]   : - dump camera display frames to netpbm images
  options:
-   -infile=<file> get frames from lvdump file <file> instead of camera
    -count=<N> number of frames to dump, default 1
-              if source is file, use 'all' for all frames
-   -seek=<N>  if sources is file start on Nth frame or Nth from end if negative
    -wait=<N>  wait N ms between frames
-   -fps=<N>   specify wait as a frame rate, 0 = unlimited
-              default 10 if source is camera, 0 if file
-   -vp[=dest] get viewfinder in format specified by vpfmt
+   -fps=<N>   specify wait as a frame rate, default 10
+   -vp[=dest] get viewfinder in ppm format
    -bm[=dest] get ui overlay in pam format
-   -vpfmt=<ppm|yuv-s-pgm|yuv-s-raw>
-      format for viewport data, default ppm
-       ppm        RGB ppm
-       yuv-s-pgm  Output Y, U, and V channels as separate pgm format images
-       yuv-s-raw  Output Y, U, and V channels as raw values
-   -pipevp[=pipetype]
-   -pipebm[=pipetype]
-      interpret vp or bm 'dest' as a command to pipe to. pipetype may be one of
-       frame   command started once per frame. For split formats, each
-               channel is piped to the same process. Default
-       split   for split formats, command is started for each channel
-       oneproc a single command is piped all frames
-       combine for -pipebm only, specify bitmap be piped to the command
-               specified with -pipevp. Viewport data is written first
+   -pipevp[=oneproc]
+   -pipebm[=oneproc]
+      treat vp or bm 'dest' as a command to pipe to. With =oneproc a single process
+      receives all frames. Otherwise, a new process is spawned for each frame
    -nopal     don't get palette for ui overlay
    -nobmo     don't get D6 ui overlay opacity data
    -quiet     don't print progress
@@ -468,15 +413,10 @@ lvdumpimg    [options]   : - dump camera display frames to images
    ${date,datefmt} current time formatted with os.date()
    ${frame,strfmt} current frame number formatted with string.format
    ${time,strfmt}  current time in seconds, as float, formatted with string.format
-   ${serial}       camera serial number, or empty if not available or infile used
-   ${pid,strfmt}   camera platform ID, default format %x, 0 if source is file
-   ${channel}      y, u or v, if format is split, otherwise empty
+   ${serial}       camera serial number, or empty if not available
+   ${pid,strfmt}   camera platform ID, default format %x
    Standard string substitutions
-   Viewport defaults depend on -vpfmt
-    ppm:       vp_${time,%014.3f}.ppm
-    yuv-s-pgm: vp_${time,%014.3f}-${channel}.pgm
-    yuv-s-raw: vp_${time,%014.3f}-${channel}.bin
-   Bitmap default is bm_${time,%014.3f}.pam
+   default vp_${time,%014.3f}.ppm bm_${time,%014.3f}.pam for viewfinder and ui respectively
    if piping with oneproc, time will be the start of the first frame and frame will be 1
 
 shoot        [options]   : - shoot a picture with specified exposure
@@ -491,8 +431,7 @@ shoot        [options]   : - shoot a picture with specified exposure
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
-                  Decimals accepted, -1 or inf for infinity.
+   -sd=<v>[units]  subject distance (focus), units one of m, mm, in, ft default m
    -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
                   if NONE, override will be ignored if not supported in current mode
                   if not given, the current camera mode is preferred
@@ -545,8 +484,7 @@ remoteshoot (rs) [dest] [options]: - shoot and download without saving to SD (re
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
-                  Decimals accepted, -1 or inf for infinity.
+   -sd=<v>[units]  subject distance (focus), units one of m, mm, in, ft default m
    -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
                   if NONE, override will be ignored if not supported in current mode
                   if not given, the current camera mode is preferred
@@ -569,39 +507,6 @@ remoteshoot (rs) [dest] [options]: - shoot and download without saving to SD (re
    -nosubst     don't do string substitution on file names
    -seq=<n>     initial value for shotseq subst string, default cli_shotseq
    -script=<filename> use local file <filename> for shooting script
-   -camscript=<filename> use local file <filename> for shooting script, where
-                script is a CHDK camera side Lua script with @/# menu options
-                If path begins with A/, the file is loaded from the camera
-   -tpl=<filename> template for use with -camscript
-   -cfg=<filename> CHDK saved script settings file for use with -camscript
-                   If path begins with A/, the file is loaded from the camera
-   -menuopts=<name1=value,...> set individual CHDK menu options with -camscript
-                delimited by ','
-
- Using custom shooting scripts:
-   -script, -camscript and related options can be used to remote shoot with
-   custom exposure or other logic. -camscript allows the use of scripts written
-   to be run from the CHDK menu, without specific support for remoteshoot.
-   However, whether this actually works depends on the specific script.
-
-   The -tpl and -cfg options operate as described for the camscript command,
-   and the comma delimited items of -menuopts are equivalent to the menu option
-   arguments. camscript may also be used to generate cfg files for use with
-   -camscript or scripts for use with -script.
-
-   Files specified for -cfg and -camscript are loaded from the camera if the
-   path starts with 'A/'. Use './A/...' or a full path to specify local files
-   in a directory named 'A'.
-
-   When using -script or -camscript, many remoteshoot options have no effect
-   unless the camera side script has code to specifically support them. This
-   includes exposure, focus, -filedummy and canon image format related options.
-   Additionally, options defining number of shots and interval (-shots, -cont,
-   -int etc) must match what the script will do, but will not control the script
-   unless it has code to implement them.  Scripts may access the values of these
-   options using the rs_opts global variable.
-
-   Messages sent by the script using write_usb_msg are displayed.
 
 Substitutions
 ${serial}         camera serial number, or empty if not available
@@ -635,8 +540,7 @@ rsint        [dest] [options]: - shoot and download with interactive control
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
-                  Decimals accepted, -1 or inf for infinity.
+   -sd=<v>[units]  subject distance (focus), units one of m, mm, in, ft default m
    -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
                   if NONE, override will be ignored if not supported in current mode
                   if not given, the current camera mode is preferred
@@ -689,9 +593,9 @@ rec                      : - switch camera to shooting mode
 play                     : - switch camera to playback mode
 clock        [options] [-set <date> <time>]: - show or set camera date/time
  <date>
- 	date to set, as YYYY/MM/DD
+        date to set, as YYYY/MM/DD
  <time>
-	time to set, as HH:MM:SS[AM|PM]. 24 hour assumed if AM / PM not present
+        time to set, as HH:MM:SS[AM|PM]. 24 hour assumed if AM / PM not present
 
  options:
    -set       set the clock to the specified date and time
@@ -704,43 +608,6 @@ clock        [options] [-set <date> <time>]: - show or set camera date/time
   This command is not aware of camera DST and timezone settings. The time shown
   or set is as it would appear on the camera display with the current settings.
   With -set, the date and time are not strictly validated.
-
-camscript    [options] <camera script> [menu options]: - convert or run CHDK script with menu options
- <camera script>
-   CHDK camera Lua script with menu header.
-   If path begins with A/, the file is loaded from the camera
- [menu options]
-   Script menu items, by name like a=1 b=2
-   Numeric values are as they would appear in the menu header
-   Booleans may be with either true/false or 0/1
-   Table and enums may be set by value using name.value, like
-    foo.value=Whatever
-   Range checks from the header are applied
- options:
-   -cfg=<filename>
-     CHDK script configuration for menu values, as found in CHDK/DATA/scriptname.N
-     If path begins with A/, the file is loaded from the camera
-   -tpl=<filename> camera lua script template, where
-      --[!glue:start] causes everything preceding it to be discarded
-      --[!glue:vars] is replaced by code that sets the CHDK menu variables
-      --[!glue:body] is replaced by the body to the script, or a line that loads
-                     a camera side file specified with -remote
-   -save=<filename> save converted file to <filename>
-   -savecfg=<filename> save final settings values as script cfg
-   -run   run converted script
-   -wait  wait for converted script to complete
-   -load[=<filename>] load camera script with loadfile() instead of including
-                      full script in output. If filename is omitted, defaults
-                      to A/CHDK/SCRIPTS/<script name> if script is PC file,
-                      or full path to script if a camera file
-
-unlock       [-kb]       : - unlock camera keyboard and screen
- options:
-  -kb   unlocks keyboard only
-
- This command sends events to enable camera keyboard and screen, which are
- commonly locked by Canon firmware when PTP used.
- Use cam_connect_unlock_ui to automatically unlock on connect.
 
 dngload      [options] <file>: - load a dng file
  file: file to load
@@ -774,17 +641,8 @@ dnghist      [options] [image num]: - generate a histogram
     region of image to search, either active area (default) or all
   -bin=<n>
     number of values in histogram bin
-  -fmt=<count|%[format]>
-    count displays bin counts directly
-    % displays percentages, modified by [format] optionally consisting of
-     'r' percent is of range specified by min/max, instead of total
-     '.' or '#' plot percent with repetitions of the . or # character
-     [width] maximum number of characters, default 100
-     '!' scale largest bin to [width]
-    examples
-     -fmt=%      numeric percentage of histogram total
-     -fmt=%r     numeric percentage of range specified by min/max
-     -fmt=%#120! lines of '#' with 120 repetitions for the largest bin
+  -fmt=<count|%|%.>
+    format for output
 
 dnglistpixels [options] [image num]: - generate a list of pixel coordinates
  options:
@@ -838,51 +696,34 @@ dngbatch     [options] [files] { command ; command ... }: - manipulate multiple 
 
 ==Runtime options==
 The set command allows you to set the following runtime options
-cli_time=false       - boolean (default:false): show CLI execution times
-cli_xferstats=false  - boolean (default:false): show CLI data transfer stats
-cli_verbose=1        - number (default:1): control verbosity of CLI
-cli_source_max=10    - number (default:10): max nested source calls
-cli_error_exit=false - boolean (default:false): exit on CLI command error
-cli_shotseq=1        - number (default:1): shooting command ${shotseq} value, incremented on shot
-config_autosave=true - boolean (default:true): auto save config variables on exit
-warn_deprecated=true - boolean (default:true): warn on deprecated libraries
-core_verbose=0       - number (default:0): ptp core verbosity
-usb_reset_on_close=false - boolean (default:false): issue USB device reset on connection close
-err_trace=critical   - string (default:critical allowed:always, critical, never): stack trace on error
-cam_switch_mode_timeout=3000 - number (default:3000): play/rec switch timeout, in ms
-cam_connect_set_ptp_mode=ip - string (default:ip allowed:ip, usb, always, never): Enable Canon PTP mode (black screen) on connect
-cam_connect_unlock_ui=ptpset - string (default:ptpset allowed:ptpset, always, never): Unlock keyboard, enable screen on connect
+cli_time=false       - boolean: show cli execution times
+cli_xferstats=false  - boolean: show cli data transfer stats
+cli_verbose=1        - number: control verbosity of cli
+cli_source_max=10    - number: max nested source calls
+cli_error_exit=false - boolean: exit on cli command error
+cli_shotseq=1        - number: shooting command ${shotseq} value, incremented on shot
+warn_deprecated=true - boolean: warn on deprecated libraries
+core_verbose=0       - number: ptp core verbosity
+usb_reset_on_close=false - boolean: issue USB device reset on connection close
+err_trace=critical   - string: stack trace on error, values: 'always', 'critical', 'never'
 
 In the GUI, the following additional options are available:
-gui_verbose=1        - number (default:1): control verbosity of GUI
-gui_shoot_half_timeout=3000 - number (default:3000): max time to wait for shoot_half, in ms
-gui_exec_direct=false - boolean (default:false): run ! in GUI context, not CLI coroutine. Blocks, breaks readline
-gui_dev_check_interval=500 - number (default:500 allowed:0 or >= 100): connection/device list check time in ms, 0=never
-gui_tab=console      - string (default:console allowed:console, files, live, user): active GUI tab
-gui_live_dropframes=false - boolean (default:false): drop frames if target fps too high
-gui_dump_palette=false - boolean (default:false): dump live palette data on state change
-gui_force_replay_palette=-1 - number (default:-1): override palette type dump replay, -1 disable
-gui_live_fps=10      - number (default:10 allowed:[1 30]): Live view target FPS
-gui_live_vp=false    - boolean (default:false): Enable live viewport
-gui_live_bm=false    - boolean (default:false): Enable UI overlay
-gui_live_bmo=true    - boolean (default:true): Enable D6 UI Opacity
-gui_live_ar_scale=true - boolean (default:true): Scale live view to aspect ratio
-gui_live_bm_fit=true - boolean (default:true): Scale UI overlay to fit
-gui_live_vp_fullx=false - boolean (default:false): Viewport 100% or 50% downsample
-gui_live_bm_fullx=true - boolean (default:true): UI overlay 100% or 50% downsample
-gui_context_plus=false - boolean (default:false): use IUP context plus if available
+gui_live_sched=false - boolean: use scheduler for live updates
+gui_live_dropframes=false - boolean: drop frames if target fps too high
+gui_dump_palette=false - boolean: dump live palette data on state change
+gui_context_plus=false - boolean: use IUP context plus if available
+gui_force_replay_palette=-1 - number: override palette type dump replay, -1 disable
+gui_verbose=1        - number: control verbosity of gui
+gui_dev_check_interval=500 - number: connection/device list check time in ms, 0=never
+gui_shoot_half_timeout=3000 - number: max time to wait for shoot_half, in ms
+gui_exec_direct=false - boolean: run ! in gui context, not cli coroutine. Blocks, breaks readline
 
 Notes:
-1) Outside of startup files, setting a GUI option when the GUI is not running
+1) Outside of startup files, setting a gui option when the gui is not running
    is currently an error
 2) gui_context_plus must be set in a startup file to take effect.
 3) gui_live_dropframes defaults to true under Linux
-4) usb_reset_on_close defaults to true under Linux
-5) If config_autosave is set in GUI or CLI mode, on exit chdkptp will save all
-   set values to the corresponding autosave.chdkptp file, (see Startup Files above).
-   This includes config_autosave itself, so all subsequent sessions will also
-   autosave. To turn off autosave, set config_autosave=false, and then use
-   cfgsave.
+4) usb_reset_on_close defaults to trun under Linux
 
 ==Substitution strings==
 Some commands accept substitution strings, also referred to as "subst strings"
@@ -892,7 +733,7 @@ accepts arguments, they are separated from the name and preceding arguments
 by a comma and optionally whitespace like ${name, arg1, arg2}. In the chdkptp
 CLI, options and arguments includes spaces must be quoted.
 
-Subst strings may by nested, e.g to convert image numbers to hexadecimal, you
+Subst strings may by nested, e.g to convert image numbers to hexadecimal, you 
 could use ${s_format,%x,${imgnum}}
 
 There is currently no mechanism for quoting or escaping in subst strings, so
@@ -909,12 +750,12 @@ multiple unique filenames, or where it is useful to generate filenames based
 on other state available to the command.
 
 ===Standard formats===
-Many subst strings take an optional format argument, listed in the help as
+Many subst strings take an optional format argument, listed in the help as 
 either 'datefmt' or 'strfmt'
-* datefmt - formats dates using Lua os.date / C strftime codes
+* datefmt - formats dates using Lua os.data / C strftime codes
   Common codes
 	  %Y = year, 4 digit
-	  %m = month, 2 digit
+	  %m = month, 2 digit 
 	  %d = day, 2 digit
 	  %H = hour, two digit 00-24
 	  %M = minute, two digit
@@ -933,7 +774,7 @@ and day, keeping original image name, like 2017/12/29/CRW_0123.DNG
 Most commands that support subst strings support the following, which implement
 standard Lua string manipulation functions. Arguments listed in [] are optional
 
-${s_format,fmt[,args]} - Format a string with "printf" formating
+${s_format,fmt[,args]} - Format a string with "printf" formating 
   e.g. ${s_format,0x%x %s,101,good doggos} = 0x65 good doggos
 ${s_sub,string[,start,end]} - Return a substring of string. Negative values
   are counted from the end. e.g. ${s_sub,hello world,-5} = world
@@ -942,7 +783,7 @@ ${s_lower,string} - Convert string to lower case, e.g. ${s_lower,Bye} = bye
 ${s_reverse,string} - Reverse the string, e.g. ${s_reverse,he} = eh
 ${s_rep,string,count} - Repeat the string count times,
   e.g. ${s_rep,he,2} = hehe
-${s_match,string,pat[,start]} - Return the portion of the string matching
+${s_match,string,pat[,start]} - Return the portion of the string matching 
   Lua pattern 'pat', starting from 'start'. If the pattern contains captures,
   the result is all captures concatenated in sequence
   e.g. ${s_match,hello world,.o%s.*} = lo world
@@ -980,7 +821,7 @@ upload interval.lua to A/CHDK/SCRIPTS/interval.lua, from the command line
 download A/CHDK/CCHDK.CFG to BACKUP.CFG in the current directory
  chdkptp -c -e"d CHDK/CCHDK.CFG BACKUP.CFG"
 
-connect to the device with name containing D10 on bus "bus-0",
+connect to the device with name containing D10 on bus "bus-0", 
  chdkptp -c"D10 -b=bus%-0" -i
 note connect -b takes a lua pattern by default, so % is used to escape the -
 
@@ -1012,7 +853,7 @@ con> mup c:\CHDK\SCRIPTS CHDK/SCRIPTS
 ad hoc scripting on PC side - download some files
 con> !t=con:listdir('A/DCIM/100CANON',{match="%.JPG$"})
 con> !for i,n in ipairs(t) do con:download("A/DCIM/100CANON/"..n,"C:/TEMP/"..n) end
-NOTE the mdownload or imdl CLI commands above are probably more convenient
+NOTE the mdownload or imdl cli commands above are probably more convenient
 
 list devices and connect to a specific camera
 ___> list
@@ -1052,42 +893,26 @@ lua/rlibs.lua msg_shell and lua/multicam.lua
 
 ==Grabbing images from the camera display==
 lvdumpimg can be used capture the viewfinder (viewport) and UI (bitmap) from
-the camera display, or convert an lvdump file previously captured using lvdump
-
-The output may be saved to files or piped to the standard input of another
-process in a variety of formats.
+the camera display. The output may be saved to files or piped to the standard
+input of another process.
 
 The -vp and -bm options are used to specify the output files or pipe commands.
 
 The -pipevp and -pipebm options are used to indicate that -vp or -bm specifies
 a command to pipe to rather than a file.
 
-By default, a new process is started for each frame. This can be controlled
-by passing the following options to -pipevm or -pipebm, like -pipevm=oneproc
- frame - process is started once per frame. This is the default
- split - process is started for each individual channel. Only valid for
-         formats that split channels
- oneproc - process is started once, and all data is piped to it
- combine - for -pipebm only, data from the bitmap is piped to the same
-           pipe as the viewport, to allow composing live view and UI
-           in a single image without temporary files. Viewport pipe
-           mode must be frame, and the viewport is written first.
+By default, a new process is started for each frame. To send all frames to a
+single process, pass oneproc to the pipe option, like -pipevm=oneproc
 
-Except for -pipebm=combine, the viewport and bitmap options are entirely
-independent. The viewport is saved before the bitmap, so if oneproc or
-combine is not used, commands for the bitmap may also access the previously
-saved viewport data.
+It is not currently possible to pipe both viewport and bitmap data to the same
+process.
+
+The viewport is saved before the bitmap, so if oneproc is not used, commands
+for the bitmap may also access the previously saved viewport data.
 
 By default substitution patterns of the form ${foo} may be used to generate
 unique files names using the date, time captured frame counter. Substitutions
 may be disabled using -nosubst.
-
-The viewport can be captured in several formats, specified by -vpfmt:
- ppm - netpbm RGB, the default.
- yuv-s-pgm - Y,U and V values as individual files, in netpbm pgm format
- yuv-s-raw - Y,U and V values as individual files, raw data only
-
-The bitmap is currently only output in netpbm pam format.
 
 Some examples:
 Grab 10 viewport frames to files organized in date and time directories
@@ -1099,37 +924,14 @@ and naming by date and time:
 lvdumpimg -vp='convert - -resize 640x480! vp_${date,%B_%d_%Y-%H_%M_%S}.jpg' -pipevp -count=1
 
 NOTE:
-On windows, imagemagick 'convert' conflicts with system file. You might need to
-use a full path.
-
-Capture viewport data as YUV and use imagemagick to convert to RGB
-lvdumpimg -vpfmt=yuv-s-pgm -pipevp=frame -vp='convert - -resize 640x480! -set colorspace YUV -combine vp_${date,%B_%d_%Y-%H_%M_%S}.jpg'
-
-Note:
-Some cameras use 0-255 for YUV values (sometimes called "jpeg" variant), while
-others (mostly digic 6, but not all of them) use the standard 16-239.
+On windows, convert conflicts with system file. You might need to use a full path.
 
 Capture viewport and bitmap, and merge them into a single PNG:
-lvdumpimg -pipebm=combine -bm -count=3 -pipevp -vp='convert - -resize 640x480! -layers merge merged_${frame}.png'
+lvdumpimg -pipebm -count=3 -vp=tmp.ppm -bm='convert tmp.ppm - -resize 640x480! -layers merge merged_${frame}.png'
 
-pipe 100 frames of viewport to ffmpeg and stream over rtp
+pipe 100 frames of viewport to ffmpeg and stream over rtp 
 lvdumpimg -pipevp=oneproc -count=100 -vp='ffmpeg -vcodec pgm -f image2pipe -i - -vcodec mpeg2video -s 640x480 -r 24 -pix_fmt yuv420p -f rtp rtp://127.0.0.1:1234'
 
 NOTE:
 You could use VLC and open rtp://127.0.0.1:1234 to watch the stream
 These probably aren't the best parameters to use
-
-Convert saved lvdump viewport to video with ffmpeg
-lvdumpimg -pipevp=oneproc -count=all -infile=input.lvdump -vp='ffmpeg -vcodec pgm -f image2pipe -r 10 -i - -c:v libx264 -vf fps=10 outfile.mp4'
-
-
-Capture viewport of a digic 5 or lower camera as raw YUV, scale to correct
-aspect ratio, and output as mp4
-lvdumpimg -count=100 -fps=10 -pipevp=oneproc -vpfmt=yuv-s-raw -vp='ffmpeg -f rawvideo -s 720x480 -r 10 -pix_fmt yuvj411p -i - -c:v libx264 -qp 18 -vf fps=10,scale=640:480 capture.mp4'
-
-Notes:
-* The resolution depends on the camera and camera settings, and can change at
-  runtime. Changing resolution while ffmpeg is running would causes errors.
-* Digic 6 and later use YUV422, so pix_fmt would need to be yuv422p or yuvj422p,
-  depending on which YUV range the camera uses.
-

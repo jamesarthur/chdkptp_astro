@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2021 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2020 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,11 +11,11 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
-
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 --]]
 --[[
-common generic Lua utilities
+common generic lua utilities
 utilities that depend on the chdkptp api go in chdku
 ]]
 local util={}
@@ -27,7 +27,7 @@ util.util_stderr = io.stderr
 util.util_stdout = io.stdout
 
 -- return version components as numbers
--- _VERSION does not usually contain final (release) number
+-- _VERSION does not usally contain final (release) number
 function util.lua_version()
 	if type(_VERSION) ~= 'string' then
 		error('missing _VERSION')
@@ -126,45 +126,9 @@ function util.err_traceback(err)
 	return debug.traceback(err,2)
 end
 
---[[
-return a function that wraps a table iterator like pairs or ipairs
-returning only items for which filter returns true
-resulting function can be used in place of pairs or ipairs
-]]
-function util.make_table_iter_filter(iter,filter)
-	return function(t)
-		return coroutine.wrap(function()
-			for k,v in iter(t) do
-				if filter(k,v,t) then
-					coroutine.yield(k,v)
-				end
-			end
-		end)
-	end
-end
-
---[[
-filtered version of pairs, for use directly in a loop like
-for k,v in util.pairs_filter(t,function(k)... end) ...
-]]
-function util.pairs_filter(t,filter)
-	return util.make_table_iter_filter(pairs,filter)(t)
-end
-
-function util.pairs_string_keys(t)
-	return util.make_table_iter_filter(pairs,function(k) return type(k) == 'string' end)(t)
-end
-
---[[
-as above, but with ipairs
-]]
-function util.ipairs_filter(t,filter)
-	return util.make_table_iter_filter(ipairs,filter)(t)
-end
-
 util.extend_table_max_depth = 10
 local extend_table_r
-extend_table_r = function(target,source,seen,depth)
+extend_table_r = function(target,source,seen,depth) 
 	if not seen then
 		seen = {}
 	end
@@ -193,15 +157,13 @@ extend_table_r = function(target,source,seen,depth)
 	return target
 end
 
---[[
+--[[ 
 copy members of source into target
 by default, not deep so any tables will be copied as references
 returns target so you can do x=extend_table({},...)
 opts
 	deep=bool - copy recursively
 	keys={key,key...} - copy only specified subset of keys, if key in source is unset, target is unchanged
-	                  - only applied to the top level with deep
-	iter=function - iterator function to use instead of pairs. Not used with keys or deep
 if deep, cycles result in an error
 deep does not copy keys which are themselves tables (the key will be a reference to the original key table)
 ]]
@@ -215,13 +177,15 @@ function util.extend_table(target,source,opts)
 	if source == nil then -- easier handling of default options
 		return target
 	end
-	if type(source) ~= 'table' then
+	if type(source) ~= 'table' then 
 		error('extend_table: source not table')
 	end
 	if source == target then
 		error('extend_table: source == target')
 	end
-	if opts.keys then -- copy only specific keys
+	if opts.deep then
+		return extend_table_r(target, source)
+	elseif opts.keys then -- copy only specific keys
 		for i,k in ipairs(opts.keys) do
 			if type(source[k]) == 'table' and opts.deep then
 				if type(target[k]) ~= 'table' then
@@ -232,11 +196,8 @@ function util.extend_table(target,source,opts)
 				target[k] = source[k]
 			end
 		end
-	elseif opts.deep then
-		return extend_table_r(target, source)
 	else
-		local iter = opts.iter or pairs
-		for k,v in iter(source) do
+		for k,v in pairs(source) do
 			target[k]=v
 		end
 	end
@@ -467,7 +428,7 @@ function util.bit_unpacked_fmt(t)
 end
 
 --[[
-concatenate numeric indexed elements of dst onto the end of src
+concatinate numeric indexed elements of dst onto the end of src
 ]]
 function util.array_cat(dst,src,opts)
 	opts = util.extend_table({
@@ -502,17 +463,6 @@ function util.array_slice(t,opts)
 end
 
 --[[
-return first index in array part of table t containing value, or nothing
-]]
-function util.array_find(t,val)
-	for i, v in ipairs(t) do
-		if v == val then
-			return i
-		end
-	end
-end
-
---[[
 convert values of an array to table of value=true
 ]]
 function util.flag_table(t)
@@ -524,7 +474,7 @@ function util.flag_table(t)
 end
 
 --[[
-return a (sub)table value with path indicated by array, e.g.
+return a (sub)table value with path indicated by arrray, e.g. 
 table_path_get(t,'a','b','c') returns t.a.b.c
 missing subtables in path return nil, like a missing value
 ]]
@@ -577,9 +527,8 @@ function util.table_path_sort(t,path,cmp)
 end
 --[[
 split str delimited by pattern pat, or plain text if opts.plain
-pat defaults to spaces ('%s+')
-empty string '' splits chars
-leading / trailing delimiters generate empty strings
+empty pat splits chars
+trailing delimiters generate empty strings
 with func, iterate over split strings
 ]]
 function util.string_split(str,pat,opts)
@@ -590,10 +539,7 @@ function util.string_split(str,pat,opts)
 	},opts)
 	local r = {}
 	local pos = opts.start
-	local s,e
-	if not pat then
-		pat = '%s+'
-	end
+	local s,e 
 	if not opts.func then
 		opts.func = function(v)
 			if string.len(v) > 0 or opts.empty then
@@ -623,41 +569,6 @@ function util.string_split(str,pat,opts)
 	end
 
 	return r
-end
-
---[[
-return string with trailing pattern 'pat' (default %s+, space) removed
-]]
-function util.string_rtrim(str,pat)
-	if not pat then
-		pat = '%s+'
-	end
-	local s, e = str:find(pat..'$')
-	if s then
-		str = str:sub(1,s-1)
-	end
-	return str
-end
-
---[[
-return string with leading pattern 'pat' (default %s+, space) removed
-]]
-function util.string_ltrim(str,pat)
-	if not pat then
-		pat = '%s+'
-	end
-	local s,e = str:find('^'..pat)
-	if s then
-		str = str:sub(e+1)
-	end
-	return str
-end
-
---[[
-return string with leading and trailing pattern 'pat' (default %s+, space) removed
-]]
-function util.string_trim(str,pat)
-	return util.string_rtrim(util.string_ltrim(str,pat),pat)
 end
 
 --[[
@@ -711,7 +622,7 @@ function util.hexdump_words(str,offset,fmt)
 	end
 	local lb = lbuf.new(str)
 	local s = ''
-	for i=0,string.len(str)-4,4 do
+	for i=0,string.len(str)-4,4 do 
 		if i%16 == 0 then
 			if i > 1 then
 				s = s .. '\n'
@@ -758,7 +669,7 @@ end
 local serialize_r
 serialize_r = function(v,opts,r,seen,depth)
 	local vt = type(v)
-	if vt == 'nil' or  vt == 'boolean' then
+	if vt == 'nil' or  vt == 'boolean' then 
 		table.insert(r,tostring(v))
 		return
 	end
@@ -778,7 +689,7 @@ serialize_r = function(v,opts,r,seen,depth)
 	end
 	if vt == 'string' then
 		table.insert(r,string.format('%q',v))
-		return
+		return 
 	end
 	if vt == 'table' then
 		if not depth then
@@ -789,12 +700,12 @@ serialize_r = function(v,opts,r,seen,depth)
 		end
 		if not seen then
 			seen={}
-		elseif seen[v] then
+		elseif seen[v] then 
 			if opts.err_cycle then
 				error('serialize: cycle')
 			else
 				table.insert(r,'"cycle:'..tostring(v)..'"')
-				return
+				return 
 			end
 		end
 		-- TODO this is restrictive, t={}, t2={t,t} will be treated as cycle
@@ -810,7 +721,7 @@ serialize_r = function(v,opts,r,seen,depth)
 				serialize_r(v1,opts,r,seen,depth+1)
 				table.insert(r,',')
 				-- TODO would be nice to line break other values at a reasonable point
-				if opts.pretty and type(v1) == 'table' then
+				if opts.pretty and type(v1) == 'table' then 
 					table.insert(r,'\n'..string.rep(' ',depth))
 				end
 			end

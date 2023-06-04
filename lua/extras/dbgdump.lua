@@ -23,7 +23,6 @@ dbload my.dmp
 dbprint
 dbobjdump
 ]]
-local argparser = require'argparser'
 local lbu=require'lbufutil'
 
 local m = {}
@@ -91,7 +90,7 @@ m.header_fields_int_v2 = {
 m.header_fields_v2 = util.extend_table({},m.header_fields_int_v2)
 table.insert(m.header_fields_v2,'build_string')
 m.header_size_v2 = 4*#m.header_fields_int_v2 + 100 -- size of build string
-
+	
 -- flat_hdr
 m.flat_hdr_fields = {
 	'magic',
@@ -105,7 +104,7 @@ m.flat_hdr_fields = {
 	'module_info',
 }
 
-m.module_fields = {
+m.module_fields = { 
 	'index',
 	-- module_entry
 	'hdr_ptr',
@@ -129,7 +128,7 @@ local function print_field(self,name)
 		printf("%19s %11u 0x%08x\n",name,v,v)
 	elseif type(v) == 'string' then
 		printf("%19s %s\n",name,v)
-	else
+	else 
 		error('field "'..tostring(name).. '" has unexpected type: '..tostring(type(v)))
 	end
 end
@@ -173,23 +172,23 @@ function module_methods.print(self)
 	end
 end
 
-function module_methods.is_text_addr(self,a)
+function module_methods.is_text_addr(self,a) 
 	return a >= self.text_addr and a < self.data_addr
 end
 
-function module_methods.is_data_addr(self,a)
+function module_methods.is_data_addr(self,a) 
 	return a >= self.data_addr and a < self.bss_addr
 end
 
-function module_methods.is_bss_addr(self,a)
+function module_methods.is_bss_addr(self,a) 
 	return a >= self.bss_addr and a < self.hdr_ptr + self.reloc_start
 end
 
-function module_methods.is_module_addr(self,a)
+function module_methods.is_module_addr(self,a) 
 	return a >= self.hdr_ptr and a < self.hdr_ptr + self.file_size
 end
 
-function module_methods.annotate_addr(self,a)
+function module_methods.annotate_addr(self,a) 
 	if not self:is_module_addr(a) then
 		return ''
 	end
@@ -206,7 +205,7 @@ function module_methods.annotate_addr(self,a)
 	return desc .. 'unknown'
 end
 
-function module_methods.objdump(self)
+function module_methods.objdump(self) 
 	local elfname = string.gsub(self.module_name,'%.[Ff][Ll][Tt]$','.elf')
 	if lfs.attributes(elfname,'mode') ~= 'file' then
 		return false,'invalid or missing input file '..elfname
@@ -280,7 +279,7 @@ function v1_methods.is_stack_addr(self,v)
 end
 
 -- user data functions
-function v1_methods.user_data_str(self)
+function v1_methods.user_data_str(self) 
 	return self._lb:string(-self.user_data_len,-1)
 end
 function v1_methods.udatai(self,i)
@@ -417,7 +416,7 @@ function v2_methods.annotate_addr(self,a)
 			return desc
 		end
 	end
-	-- common
+	-- common 
 	desc = v1_methods.annotate_addr(self,a)
 	if desc ~= ''  then
 		return desc
@@ -504,14 +503,14 @@ function m.initcli()
 			names={'dbload'},
 			help='load debug dump',
 			arghelp='<filename>',
-			args=argparser.create{},
+			args=cli.argparser.create{},
 
-			func=function(self,args)
+			func=function(self,args) 
 				if not args[1] then
 					return false,'expected filename'
 				end
 				local d,err = m.load(args[1])
-				if not d then
+				if not d then 
 					return false,err
 				end
 				m.selected = d
@@ -521,7 +520,7 @@ function m.initcli()
 		{
 			names={'dblist'},
 			help='list loaded debug dumps',
-			func=function(self,args)
+			func=function(self,args) 
 				return true,m.list()
 			end,
 		},
@@ -529,8 +528,8 @@ function m.initcli()
 			names={'dbsel'},
 			help='select active dump',
 			arghelp='<number>',
-			args=argparser.create{},
-			func=function(self,args)
+			args=cli.argparser.create{},
+			func=function(self,args) 
 				local n = tonumber(args[1])
 				if m.dumplist[n] then
 					m.selected = m.dumplist[n]
@@ -554,13 +553,13 @@ function m.initcli()
  -show    show summary (default)
 ]],
 
-			args=argparser.create{
+			args=cli.argparser.create{
 				full=false,
 				stack=false,
 				udata=false,
 				mods=false,
 			},
-			func=function(self,args)
+			func=function(self,args) 
 				local n = tonumber(args[1])
 				local d
 				if n then
@@ -584,7 +583,7 @@ function m.initcli()
 						d:print_all_meminfo()
 					end
 					if args.mods then
-						if self.ver < 2 then
+						if self.ver < 2 then 
 							printf('no module information in dump ver %d\n',tonumber(d.ver))
 						else
 							d:print_modules()
@@ -610,10 +609,10 @@ function m.initcli()
  [count]  number of bytes or words to show
   -i32=[fmt]     show as words, with optional format fmt
 ]],
-			args=argparser.create{
+			args=cli.argparser.create{
 				i32=false
 			},
-			func=function(self,args)
+			func=function(self,args) 
 				local offset = tonumber(args[1])
 				local count = tonumber(args[2])
 				if not offset then
@@ -654,8 +653,8 @@ function m.initcli()
  If neither is specified, all modules are disassembled
 ]],
 
-			args=argparser.create{},
-			func=function(self,args)
+			args=cli.argparser.create{},
+			func=function(self,args) 
 				local mod
 				local d = m.selected
 				if not d then

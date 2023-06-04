@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2012-2022 <reyalp (at) gmail dot com>
+ Copyright (C) 2012-2020 <reyalp (at) gmail dot com>
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
   published by the Free Software Foundation.
@@ -35,7 +35,7 @@ local mc={
 	cmd_defaults={ -- defaults for mc:cmd
 		flushmsgs=true,
 		printcmd='once',
-		printstatus='med', -- command status verbosity,
+		printstatus='med', -- command status verbosity, 
 			-- 'med': default, compact per-camera results.
 			-- 'short': single line success, per camera errors
 			-- 'full': unserialize, pretty print full status structure per cam
@@ -90,7 +90,7 @@ connect to cameras, default all available
 opts:{
 	add=bool -- don't reset existing list, just add any matching camereas
 	match={ -- match spec as used in CLI connect
-		bus=string
+		bus=string 
 		dev=string
 		product_id=number
 		serial_number=string
@@ -387,7 +387,7 @@ local function get_list_path(path)
 	return path
 end
 --[[
-write a list of camera serial numbers
+write a list of camera serial numbers 
 path=string --path to file default CHDKPTP_HOME/mccams.txt
 opts:{
 	overwrite=bool
@@ -418,7 +418,7 @@ function mc:save_list(path,opts)
 	local s=util.serialize(t,{pretty=true,bracket_keys=true})
 
 	fsutil.mkdir_parent(path)
-	fsutil.writefile(path,s,{bin=true})
+	fsutil.writefile_e(s,path,'wb')
 	printf("wrote: %s\n",path)
 end
 --[[
@@ -426,7 +426,7 @@ load and return saved camera list
 ]]
 function mc:load_list(path)
 	path=get_list_path(path)
-	local list,err=util.unserialize(fsutil.readfile(path))
+	local list,err=util.unserialize(fsutil.readfile_e(path))
 	if err then
 		errlib.throw{etype='unserialize',msg='list unserialize failed '..tostring(err)}
 	end
@@ -628,14 +628,14 @@ function mc:init_sync_single(lcon,lt0,rt0,count)
 -- msend average time to complete a send, accounts for a portion of latency
 -- not clear what this includes, or how much is spent in each direction
 	local send_stats = util.table_stats(sends)
-	printf('%s: ticks=%d min=%.0f max=%.0f mean=%f sd=%f\n',
+	printf('%s: ticks=%d min=%d max=%d mean=%f sd=%f\n',
 			lcon.mc_id,
 			#ticks,
 			tick_stats.min,
 			tick_stats.max,
 			tick_stats.mean,
 			tick_stats.sd)
-	printf('%s: sends=%d min=%.0f max=%.0f mean=%f sd=%f\n',
+	printf('%s: sends=%d min=%d max=%d mean=%f sd=%f\n',
 			lcon.mc_id,
 			#sends,
 			send_stats.min,
@@ -648,7 +648,7 @@ function mc:init_sync_single(lcon,lt0,rt0,count)
 		tickoff=tick_stats.mean,
 		msend=send_stats.mean,
 		sdsend=send_stats.sd,
-		-- adjusted base remote time
+		-- adjusted base remote time 
 		rtadj = rt0 - tick_stats.mean - send_stats.mean/2,
 	}
 end
@@ -681,7 +681,7 @@ function mc:init_sync(count)
 			warnf('%s:init_sync_cam: %s\n',lcon.mc_id,tostring(err))
 		end
 	end
-	printf('minimum sync delay %.0f\n',self.min_sync_delay)
+	printf('minimum sync delay %d\n',self.min_sync_delay)
 end
 
 --[[
@@ -695,7 +695,7 @@ status table is in the form
  status={ -- camera side status table
   cmd=string -- command  name
   status=value -- camera side status value, may be any serializable type
-  msg=string -- camera side message, usually an error
+  msg=string -- camera side message, usually an error 
  }
 }
 ]]
@@ -717,7 +717,7 @@ function mc:get_single_status(lcon,cmd,r)
 		if not status then
 			r.failed = true
 			r.err = tostring(msg)
-			return
+			return 
 		end
 		-- TODO it would be good to skip over any stale status messages
 		if cmd and msg.cmd ~= cmd then
@@ -789,7 +789,7 @@ get camera tick matching tstart + syncat
 <camera base time> + <tstart - local base time> + syncat
 ]]
 function mc:get_sync_tick(lcon,tstart,syncat)
-	return util.round(lcon.mc_sync.rtadj + (tstart - lcon.mc_sync.lt0)*1000 + syncat)
+	return lcon.mc_sync.rtadj + (tstart - lcon.mc_sync.lt0)*1000 + syncat
 end
 function mc:flushmsgs()
 	for lcon in self:icams() do
@@ -821,7 +821,7 @@ function mc:cmd(cmd,opts)
 	if opts.printcmd == 'once' then
 		local s=cmd
 		if opts.syncat then
-			s=string.format('%s [sync +%.0f]',s,opts.syncat)
+			s=string.format('%s [sync +%d]',s,opts.syncat)
 		end
 		if opts.camargs then
 			if opts.args then
@@ -1035,7 +1035,7 @@ opts:{
 	poll
 	printstatus
 --]]
-function mc:shoot(opts)
+function mc:shoot(opts) 
 	opts = util.extend_table({
 		shots=1,
 		interval=2000,
@@ -1125,8 +1125,8 @@ opts:{
 	synctime:number -- number of milliseconds in the future to shoot, must be >= min_sync_deley
 	defexp:boolean -- use tv=1/256 sv=400
 --]]
-function mc:testshots(opts)
-	opts = util.extend_table({
+function mc:testshots(opts) 
+	opts = util.extend_table({ 
 		nshots=1,
 		shoot_cmd='shoot',
 	},opts)
@@ -1196,7 +1196,7 @@ function mc:cmd_msgbatch_cam(lcon,cmd)
 				table.insert(r,v)
 			end
 		-- error
-		elseif not msg.status then
+		elseif not msg.status then 
 			warnf('%s: failed %s\n',lcon.mc_id,tostring(msg.msg))
 			return
 		-- done
@@ -1250,12 +1250,7 @@ function mc:find_files(paths,opts)
 	opts=util.extend_table({},opts)
 	local ropts=util.extend_table({},opts)
 	ropts.ff_func=nil
-	local cmd = string.format([[call
-local yc,yt=set_yield(nil,nil)
-local r=find_files(%s,%s,%s)
-set_yield(yc,yt)
-return r
-]],
+	local cmd = string.format('call return find_files(%s,%s,%s)',
 		util.serialize(paths),
 		util.serialize(ropts),
 		opts.ff_func)
@@ -1263,57 +1258,27 @@ return r
 end
 
 function mc:delete_files_list_cam(lcon,imgs,opts)
-	opts = util.extend_table({
-		batch_size=50,
-	},opts)
-	if not imgs or #imgs == 0 then
-		warnf("%s delete_files_list_cam empty file list\n",lcon.mc_id)
-		return
-	end
-	local i = 1
-	local batch = {}
-	local batch_no = 1
-	while imgs[i] do
-		table.insert(batch,imgs[i].full)
-		if #batch == opts.batch_size or #imgs == i then
-			if opts.pretend then
-				printf('delete_files:\n %s\n',table.concat(batch,'\n '))
-			else
-				local status,err = lcon:write_msg_pcall(
-					('delete_files %s'):format(util.serialize({files=batch, pretend=opts.rpretend}))
-				)
-				if not status then
-					warnf("%s send failed %s\n",lcon.mc_id,tostring(err))
-					return
-				end
-				local msg=lcon:wait_msg({
-						mtype='user',
-						msubtype='table',
-						munserialize=true,
-				})
-				if msg.status then
-					-- delete_files returns status for each file in a table of ok=bool, m=message
-					for j,rmstatus in ipairs(msg.msg) do
-						if not rmstatus.ok then
-							warnf('%s batch %d:%d delete %s failed %s\n',lcon.mc_id,batch_no,j,tostring(batch[j]),tostring(rmstatus.m))
-						elseif opts.rpretend then
-						-- remote pretend returns the filename in message portion
-							printf('%s batch %d:%d delete %s\n',lcon.mc_id,batch_no,j,tostring(rmstatus.m))
-							if rmstatus.m ~= batch[j] then
-								warnf("%s filename mismatch %s ~= %s\n",lcon.mc_id,tostring(rmstatus.m),tostring(batch[j]))
-							end
-						elseif opts.verbose then
-							printf('%s batch %d:%d delete %s\n',lcon.mc_id,batch_no,j,tostring(batch[j]))
-						end
-					end
-				else
-					warnf("%s delete_files failed %s\n",lcon.mc_id,tostring(msg.err))
-				end
-			end
-			batch = {}
-			batch_no = batch_no + 1
+	for i,f in ipairs(imgs) do
+		if opts.verbose then
+			printf('os.remove("%s")\n',f.full)
 		end
-		i = i + 1
+		if not opts.pretend then
+			lcon:flushmsgs() -- prevent status from being confused by stale messages
+			-- TODO one at a time with status is slow, should batch in both directions
+			local status,err = lcon:write_msg_pcall(string.format('pcall return os.remove("%s")',f.full))
+			if not status then
+				warnf("%s send failed %s\n",lcon.mc_id,tostring(err))
+				return
+			end
+			local msg=lcon:wait_msg({
+					mtype='user',
+					msubtype='table',
+					munserialize=true,
+			})
+			if msg.status == false then
+				warnf("%s remove failed %s\n",lcon.mc_id,tostring(msg.err))
+			end
+		end
 	end
 end
 
@@ -1323,14 +1288,6 @@ to delete directories, you must ensure files are sorted with directories last (d
 e.g.
 l=mc:find_files('A/DCIM',{dmatch='%d%d%d___%d%d',fmatch='%d%d%d___%d%d/.*',dirsfirst=false,ff_func='find_files_all_fn'})
 mc:delete_files_list(l)
-
-opts={
-	pretend=bool -- list files to be deleted, without sending to camera
-	rpretend=bool -- check for existence of files on camera and camera, but don't delete
-	batch_size=number -- max number of files to delete per call.
-		-- Larger may be faster, but consumes more memory, default 50.
-		-- a camera side collectgarbae('step') is run once per batch
-}
 ]]
 function mc:delete_files_list(list,opts)
 	opts=util.extend_table({},opts)
@@ -1541,9 +1498,9 @@ function draw_id()
 		return
 	end
 	if mc.id then
-		draw_string(5, 5, string.format('%02d',mc.id), color.white, color.blue, 4)
+		draw_string(5, 5, string.format('%02d',mc.id), color.white, color.blue, 4) 
 	else
-		draw_string(5, 5, "-", color.white, color.red, 4)
+		draw_string(5, 5, "-", color.white, color.red, 4) 
 	end
 end
 
@@ -1639,10 +1596,7 @@ function cmds.shoot_burst()
 		shoot_hook_ready_timeout=mc.shoot_hook_ready_timeout,
 		raw_hook_ready_timeout=mc.raw_hook_ready_timeout,
 	},opts)
-	if opts.interval + 2000 > opts.shoot_hook_timeout then
-		opts.shoot_hook_timeout = opts.interval + 2000
-	end
-	local cont = (rlib_get_drive_mode_info().is_cont and opts.cont)
+	local cont = rlib_get_drive_mode_info().is_cont
 
 	local r={}
 	hook_shoot.set(opts.shoot_hook_timeout)
@@ -1726,11 +1680,11 @@ function cmds.shoot_burst_usb_pwr()
 		opts.shoot_hook_timeout = opts.remote_on_wait
 	end
 
-	local cont = (rlib_get_drive_mode_info().is_cont and opts.cont)
+	local cont = rlib_get_drive_mode_info().is_cont
 
 	-- users should probably set this on script startup, but setting again doesn't hurt
-	-- not required for non-USB remote, but should be harmless
-	usb_force_active(true)
+	-- not required for non-USB remote, but should be harmless 
+	usb_force_active(true) 
 
 	local r={}
 	hook_shoot.set(opts.shoot_hook_timeout)
@@ -1817,7 +1771,7 @@ end
 
 function cmds.call()
 	local f,err=loadstring(mc.args)
-	if f then
+	if f then 
 		write_status({f()})
 	else
 		write_status(false,err)
@@ -1826,7 +1780,7 @@ end
 
 function cmds.pcall()
 	local f,err=loadstring(mc.args)
-	if f then
+	if f then 
 		local r={pcall(f)}
 		local status=table.remove(r,1)
 		if not status then
@@ -1848,40 +1802,12 @@ function cmds.imglist()
 		write_status(false,'unserialize failed '..tostring(err))
 		return
 	end
- 	-- enable default yield because find_files can run long enough to cause errors
-	local yc, yt = set_yield(nil,nil)
 	local status,err = ff_imglist(args)
-	set_yield(yc,yt)
 	if status then
 		write_status(true,'done')
 	else
 		write_status(false,tostring(err))
 	end
-end
-
-function cmds.delete_files()
-	local opts,err=unserialize(mc.args)
-	if not opts then
-		write_status(false,'unserialize failed '..tostring(err))
-		return
-	end
-	if type(opts.files) ~= 'table' then
-		write_status(false,'expected files table')
-		return
-	end
-	local r={}
-	for i,fn in ipairs(opts.files) do
-		local fr = {}
-		if opts.pretend then
-			fr.ok = (os.stat(fn)~=nil)
-			fr.m = fn
-		else
-			fr.ok, fr.m = os.remove(fn)
-		end
-		table.insert(r,fr)
-	end
-	collectgarbage('step')
-	write_status(true,r)
 end
 
 function mc.idle()
@@ -1891,7 +1817,7 @@ end
 function mc.run(opts)
 	extend_table(mc,opts)
 	set_yield(-1,-1)
-	repeat
+	repeat 
 		local msg=read_usb_msg(mc.msg_timeout)
 		if msg then
 			mc.cmd,mc.args=string.match(msg,'^([%w_]+)%s*(.*)')

@@ -46,7 +46,7 @@ LIBUSB_LIB=usb
 # libs to be used when linking readline statically
 # for more portable exe in binary zips
 # set READLINE_STATIC=1 to use
-READLINE_STATIC_LIB=readline history tinfo
+READLINE_STATIC_LIB=readline history tinfo 
 # default shared libs
 READLINE_LIB=readline history
 
@@ -58,12 +58,12 @@ CD_PLUS_LIB=cdcontextplus cdluacontextplus$(LUA_SFX)
 GDI_PLUS_LIBS=gdiplus stdc++
 
 #defaults, can be overridden by config or on command line
-DEBUG=
+DEBUG=1
 
 # Lua 5.1 is no longer supported by chdkptp, but it might work
-# default to Lua 5.3
-# Lua 5.2 is still supported for now, but minimally tested
-USE_LUA_VER=53
+# Lua 5.3 is experimental
+# default to Lua 5.2 
+USE_LUA_VER=52
 
 ifeq ($(OSTYPE),Windows)
 # enable CD "plus" context support, if GUI enabled
@@ -128,11 +128,9 @@ READLINE_LIB=STATIC_START $(READLINE_STATIC_LIB) STATIC_END
 endif
 
 ifdef GUI
-ifndef GTK_SUPPORT
 IUP_SUPPORT=1
 CD_SUPPORT=1
 EXE_EXTRA=$(GUI_SFX)
-endif
 endif
 
 
@@ -145,7 +143,6 @@ endif
 ifdef DEBUG
 CFLAGS+=-g
 LDFLAGS+=-g
-CFLAGS+=-Og
 else
 CFLAGS+=-O2
 endif

@@ -84,12 +84,12 @@ m.validate_funcs=function(funcs,str)
 	return m.new(funcs):validate(str)
 end
 --[[
-return a function that passes the named value from state through string.format,
+return a function that passes the named value from state through string.format, 
 using the first arg as the format string, or default_fmt if not specified
 ]]
 m.format_state_val=function(name,default_fmt)
 	return function(argstr,obj)
-		if not argstr then
+		if not argstr then 
 			argstr=default_fmt
 		end
 		return string.format(argstr,obj.state[name])
@@ -101,7 +101,7 @@ using the first arg as the date format, or default_fmt if not specified
 ]]
 m.format_state_date=function(name,default_fmt)
 	return function(argstr,obj)
-		if not argstr then
+		if not argstr then 
 			argstr=default_fmt
 		end
 		return os.date(argstr,obj.state[name])
@@ -206,7 +206,7 @@ TODO error checking isn't done at validation time. Non-nested could in principle
 	end,
 	--[[
 	${s_gsub,subject,pattern,replacement[,limit]}
-
+	
 	returns string with limit matches of pattern replaced by replacement
 	in replacement, %0 stands for the whole match, while %1-%9 corespond to captures
 	${s_gsub,hello world,(%a+)%s+(%a+),%2 %1} = "world hello"

@@ -30,7 +30,7 @@ function counter_proto.new(init)
 end
 function counter_proto:reset()
 	self.times={}
-	self.r_times={} -- repeat times = time between starts
+	self.r_times={} -- repeat times = time between starts 
 	self.count=0
 end
 function counter_proto:start()
@@ -131,7 +131,7 @@ function stats:get_last_total_ms()
 	if self.frames.count == 0 or self.xfer.count == 0 then
 		return 0
 	end
-	return self.frames:last_time() + self.xfer:last_time()
+	return self.frames:last_time() + self.xfer:last_time() 
 end
 
 function stats:get()
@@ -142,7 +142,7 @@ function stats:get()
 	else
 		run = "no"
 	end
-
+	
 	local fps_avg = 0
 	local frame_time = 0
 	local tp_bps_avg = 0
