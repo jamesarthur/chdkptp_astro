@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2011 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2023 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,8 +11,7 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
 --]]
 --[[
 utilities for dealing with CHDK DNG images and headers
@@ -20,6 +19,7 @@ this is not a fully featured TIFF/TIFF-EP/DNG reader
 ]]
 local m={}
 local lbu=require'lbufutil'
+local histoutil=require'histoutil'
 --[[
 bind the tiff header
 --]]
@@ -126,7 +126,7 @@ m.tag_types = {
 	{name='SBYTE',size=1,signed=true},
 	{name='UNDEFINED',size=1},
 	{name='SSHORT',size=2,signed=true},
-	{name='SSLONG',size=4,signed=true},
+	{name='SLONG',size=4,signed=true},
 	{name='SRATIONAL',size=8,elsize=4,signed=true,rational=true},
 	{name='FLOAT',size=4,float=true},
 	{name='DOUBLE',size=8,float=true},
@@ -185,7 +185,7 @@ local ifd_entry_methods = {
 		local vdesc
 		if self:is_inline() then
 			vdesc = ' value'
-		else 
+		else
 			vdesc = 'offset'
 		end
 		return string.format('%-30s tag=0x%04x type=%-10s count=%07d %s=0x%08x',
@@ -199,7 +199,7 @@ local ifd_entry_methods = {
 	--[[
 	return the offset of the data within the lbuf, either inline in the ifd entry or in body
 	]]
-	get_data_off = function(self) 
+	get_data_off = function(self)
 		if self:is_inline() then
 			return self.off + 8 -- short tag + short type + long count
 		else
@@ -207,7 +207,7 @@ local ifd_entry_methods = {
 		end
 	end,
 	--[[
-	get a numeric elements of a value
+	get a numeric element of a value
 	for ASCII, bytes are returned
 	for rational, numerator and denominator are retuned in an array
 	--]]
@@ -233,6 +233,52 @@ local ifd_entry_methods = {
 		end
 		return t.lb_get(self._lb,v_off)
 	end,
+	--[[
+	set a numeric element
+	for ascii, value is a byte
+	for rational, val must be an array of two numbers
+		TODO converting to X/1000 or something would be convenient
+	--]]
+	setel = function(self,val,index)
+		if not index then
+			index = 0
+		end
+		if index >= self.count then
+			errlib.throw{etype='bad_arg', msg='setel: invalid index '..tostring(index)}
+		end
+		local t = self:type()
+		-- TODO would be better to allow setting arbitrary bytes
+		if t.name == 'unk' then
+			errlib.throw{etype='bad_arg', msg='setel: cannot set unk value'}
+		end
+		if not t.lb_get then
+			errlib.throw{etype='bad_arg', msg='setel: no setter for this type'}
+		end
+		local v_off = self:get_data_off() + t.size*index
+		if t.rational then
+			if type(val) ~= 'table' then
+				errlib.throw{etype='bad_arg', msg='setel: expected table for rational'}
+			end
+			if #val ~= 2 then
+				errlib.throw{etype='bad_arg', msg='setel: expected exactly 2 elements for rational'}
+			end
+			local v1,v2=tonumber(val[1]),tonumber(val[2])
+			if not (v1 and v2) then
+				errlib.throw{etype='bad_arg', msg='setel: expected numbers'}
+			end
+			t.lb_set(self._lb,v_off,v1)
+			t.lb_set(self._lb,v_off+t.elsize,v2)
+		else
+			local v=tonumber(val)
+			if not v then
+				errlib.throw{etype='bad_arg', msg='setel: expected number'}
+			end
+			t.lb_set(self._lb,v_off,v)
+		end
+	end,
+	--[[
+	get multiple elements of a value
+	--]]
 	getel_array = function(self,start,count)
 		local r = {}
 		if not start then
@@ -249,6 +295,26 @@ local ifd_entry_methods = {
 			table.insert(r,self:getel(i))
 		end
 		return r
+	end,
+	--[[
+	set multiple elements of a value
+	--]]
+	setel_array = function(self,vals,start)
+		local r = {}
+		if not start then
+			start = 0
+		elseif start >= self.count then
+			errlib.throw{etype='bad_arg', msg='setel_array: invalid start index '..tostring(start)}
+		end
+		if type(vals) ~= 'table' then
+			errlib.throw{etype='bad_arg', msg='setel_array: expected array'}
+		end
+		if start + #vals > self.count then
+			errlib.throw{etype='bad_arg', msg='setel_array: too many elements'}
+		end
+		for i,v in ipairs(vals) do
+			self:setel(vals[i],start+i-1)
+		end
 	end,
 	-- get bytes as a lua string
 	get_byte_str = function(self)
@@ -291,6 +357,10 @@ local ifd_entry_methods = {
 			return self:getel_array(start,max)
 		end
 	end,
+	-- override lbu hexdump, which defaults to the entire lbuf
+	hexdump = function(self)
+		return util.hexdump(self:get_byte_str())
+	end
 }
 function m.bind_ifd_entry(d,ifd,i)
 	local off = ifd.off + 2 + i*12 -- offset + entry count + index*sizeof(entry)
@@ -325,11 +395,7 @@ function ifd_methods.write_image_data(self,dst)
 	end
 
 	if type(dst) == 'string' then
-		local err
-		fh, err = io.open(dst,'wb')
-		if not fh then
-			error('open failed '..tostring(err))
-		end
+		fh = fsutil.open_e(dst,'wb')
 	elseif type(dst) == 'userdata' and type(dst.read) == 'function' then
 		fh = dst
 	else
@@ -389,9 +455,10 @@ function m.bind_ifds(d,ifd_off,ifd_list,parent)
 				ifd.byname[e:tagname()] = e
 			end
 		end
+		ifd.size = n_entries * 12 + 2
 		util.extend_table(ifd,ifd_methods)
 		table.insert(ifd_list,ifd)
-		ifd_off = d._lb:get_u32(ifd_off + n_entries * 12 + 2)
+		ifd_off = d._lb:get_u32(ifd_off + ifd.size)
 	until ifd_off == 0
 	return ifd_list
 end
@@ -420,7 +487,7 @@ function dng_methods.print_ifd(self,ifd,opts)
 		p = p.parent
 	end
 
-	printf('%sifd%s offset=0x%x entries=%d\n',indent,pathstr,ifd.off,ifd.n_entries)
+	printf('%sifd%s offset=0x%x entries=%d size=%d\n',indent,pathstr,ifd.off,ifd.n_entries,ifd.size)
 	for j, e in ipairs(ifd.entries) do
 		printf('%s %s\n',indent,e:describe())
 		-- TODO undefined we know about should be sub-classed in a way that allows displaying
@@ -463,7 +530,7 @@ function dng_methods.print_ifd(self,ifd,opts)
 	opts.depth = opts.depth-1
 end
 
-function m.cfa_bytes_to_str(cfa_bytes) 
+function m.cfa_bytes_to_str(cfa_bytes)
 	local cfa={cfa_bytes:byte(1,-1)}
 	local r = ''
 	for i,v in ipairs(cfa) do
@@ -499,7 +566,7 @@ function dng_methods.print_header(self)
 end
 function dng_methods.print_info(self)
 	self:print_header()
-	for i, ifd in ipairs(self.ifds) do 
+	for i, ifd in ipairs(self.ifds) do
 		self:print_ifd(ifd,{recurse=true})
 	end
 end
@@ -524,19 +591,15 @@ function dng_methods.build_histogram(self,opts)
 		bottom=ifd.byname.ActiveArea:getel(2),
 		right=ifd.byname.ActiveArea:getel(3),
 	},opts);
-	local h={}
-	for i=0,self:max_value() do
-		h[i]=0
-	end
-	local total = 0
+	local h=histoutil.new_histo(self:max_value()+1)
+	local img=self.img
 	for y = opts.top, opts.bottom-1 do
 		for x = opts.left, opts.right-1 do
-			local v = self.img:get_pixel(x,y)
+			local v = img:get_pixel(x,y)
 			h[v] = h[v] + 1
-			total = total+1
 		end
 	end
-	h.total = total
+	h.total = (opts.bottom - opts.top)*(opts.right - opts.left)
 	return h
 end
 
@@ -568,7 +631,7 @@ function dng_methods.dump_image(self,dst,opts)
 	-- hack to default 16 bit pgm to big endian if not specified
 	-- per http://netpbm.sourceforge.net/doc/pamendian.html is the correct format,
 	-- but allow little endian to be forced if someone wants it
-	if not opts.endian then 
+	if not opts.endian then
 		if opts.pgm and opts.bpp == 16 then
 			opts.endian = 'big'
 		else
@@ -605,6 +668,25 @@ function dng_methods.dump_image(self,dst,opts)
 	end
 	outlb:fwrite(fh)
 	fh:close()
+	return true
+end
+
+function dng_methods.dump_thumb(self,dst,opts)
+	opts=util.extend_table({},opts)
+	if not opts.ppm then
+		self.main_ifd:write_image_data(dst)
+	else
+		-- TODO should check that it's actually an RGB8 thumb
+		local fh, err = io.open(dst,'wb')
+		if not fh then
+			return false, 'open failed '..tostring(err)
+		end
+		fh:write(string.format('P6\n%d\n%d\n%d\n',
+			self.main_ifd.byname.ImageWidth:getel(),
+			self.main_ifd.byname.ImageLength:getel(),255))
+		self.main_ifd:write_image_data(fh)
+		fh:close()
+	end
 	return true
 end
 
@@ -675,7 +757,7 @@ order is only for testing external data in little endian format
 function dng_methods.set_data(self,data,offset,order)
 	-- TODO makes assumptions about header layout
 	local ifd=self.raw_ifd
-	if not ifd then 
+	if not ifd then
 		error('ifd 0.0 not found')
 	end
 
@@ -777,7 +859,8 @@ function m.bind_header(lb)
 	return d
 end
 
-function m.load(filename)
+function m.load(filename, opts)
+	opts = util.extend_table({},opts)
 	local lb,err=lbu.loadfile(filename)
 	if not lb then
 		return false, err
@@ -787,11 +870,13 @@ function m.load(filename)
 		return false, err
 	end
 	d.filename = filename
-	-- TODO this will fail loading dngs that aren't in a format supported by rawimg
-	-- TODO also will prevent loading standalone headers
-	local status, err = d:set_data()
-	if not status then
-		return false, err
+	-- optionally don't load data, for header-only files or unsupported formats
+	-- TODO some functions will be broken
+	if not opts.nodata then
+		local status, err = d:set_data()
+		if not status then
+			return false, err
+		end
 	end
 	return d
 end

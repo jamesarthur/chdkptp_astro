@@ -113,7 +113,7 @@ function m.load(name)
 		d.fmt_desc = function(self)
 			return string.format('Exception vector 0x%x (%s)\n',self.code,self:fmt_code())
 		end
-		d.fmt_regs = function(self) 
+		d.fmt_regs = function(self)
 			local o = self.reg_start
 			local r = 'Registers:\n'
 			for i,name in ipairs(rnames) do
@@ -148,21 +148,27 @@ function m.load(name)
 		s = string.gsub(s,'\r','') -- logs r \r\n
 		return s
 	end
-	d.print = function(self)
-		printf(self:fmt_desc())
-		printf('Occured at %s\n',self.time)
-		printf('Task ID: %d\n',self.task_id)
-		printf('Task Name: %s\n',self.task_name)
-		if self.fmt_regs then
-			printf(self:fmt_regs())
+	d.print = function(self,fh)
+		if not fh then
+			fh = util.util_stdout
 		end
-		printf('Stack:\n')
-		printf(self:fmt_stack())
+		util.fprintf(fh,self:fmt_desc())
+		util.fprintf(fh,'Occured at %s\n',self.time)
+		util.fprintf(fh,'Task ID: %d\n',self.task_id)
+		util.fprintf(fh,'Task Name: %s\n',self.task_name)
+		if self.fmt_regs then
+			util.fprintf(fh,self:fmt_regs())
+		end
+		util.fprintf(fh,'Stack:\n')
+		util.fprintf(fh,self:fmt_stack())
 	end
-	d.print_all = function(self)
-		self:print()
-		printf('Camera log:\n')
-		printf(self:fmt_log())
+	d.print_all = function(self,fh)
+		if not fh then
+			fh = util.util_stdout
+		end
+		self:print(fh)
+		util.fprintf(fh,'Camera log:\n')
+		util.fprintf(fh,self:fmt_log())
 	end
 	return d
 end

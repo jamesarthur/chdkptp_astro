@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2014 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2022 <reyalp (at) gmail dot com>
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
   published by the Free Software Foundation.
@@ -10,9 +10,7 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
+  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
 ]]
 --[[
 simple library system for building remote commands
@@ -48,7 +46,7 @@ function rlibs:register(t)
 	if type(t.name) ~= 'string' then
 		error('expected name string')
 	end
-	t.lines = 0 
+	t.lines = 0
 	for c in string.gmatch(t.code,'\n') do
 		t.lines = t.lines + 1
 	end
@@ -101,7 +99,7 @@ local function rlib_get_code(build)
 	return code
 end
 function rlibs:build(libnames)
-	-- single can be given as string, 
+	-- single can be given as string,
 	-- nil is allowed, returns empty object
 	if type(libnames) == 'string' or type(libnames) == 'nil' then
 		libnames={libnames}
@@ -143,7 +141,7 @@ serialize_r = function(v,opts,r,seen,depth)
 	end
 	if vt == 'string' then
 		table.insert(r,string.format('%q',v))
-		return 
+		return
 	end
 	if vt == 'table' then
 		if not depth then
@@ -154,30 +152,49 @@ serialize_r = function(v,opts,r,seen,depth)
 		end
 		if not seen then
 			seen={}
-		elseif seen[v] then 
+		elseif seen[v] then
 			if opts.err_cycle then
 				error('serialize: cycle')
 			else
 				table.insert(r,'"cycle:'..tostring(v)..'"')
-				return 
+				return
 			end
 		end
-		seen[v] = true;
+		seen[v] = true
 		table.insert(r,'{')
-		for k,v1 in pairs(v) do
+		local maxn=#v
+		if opts.compact_arrays and maxn > 0 then
 			if opts.pretty then
 				table.insert(r,'\n'..string.rep(' ',depth))
 			end
-			if type(k) == 'string' and string.match(k,'^[_%a][%a%d_]*$') then
-				table.insert(r,k)
-			else
-				table.insert(r,'[')
-				serialize_r(k,opts,r,seen,depth+1)
-				table.insert(r,']')
+			for k,v1 in ipairs(v) do
+				serialize_r(v1,opts,r,seen,depth+1)
+				table.insert(r,',')
+				if opts.pretty and type(v1) == 'table' then
+					table.insert(r,'\n'..string.rep(' ',depth))
+				end
 			end
-			table.insert(r,'=')
-			serialize_r(v1,opts,r,seen,depth+1)
-			table.insert(r,',')
+		end
+
+		for k,v1 in pairs(v) do
+			if not opts.compact_arrays or type(k) ~= 'number' or k < 1 or k > maxn then
+				if opts.pretty then
+					table.insert(r,'\n'..string.rep(' ',depth))
+				end
+				if not opts.bracket_keys and type(k) == 'string' and string.match(k,'^[_%a][%a%d_]*$') then
+					table.insert(r,k)
+				else
+					table.insert(r,'[')
+					serialize_r(k,opts,r,seen,depth+1)
+					table.insert(r,']')
+				end
+				table.insert(r,'=')
+				serialize_r(v1,opts,r,seen,depth+1)
+				table.insert(r,',')
+			end
+		end
+		if r[#r] == ',' then
+			table.remove(r)
 		end
 		if opts.pretty then
 			table.insert(r,'\n'..string.rep(' ',depth-1))
@@ -196,6 +213,8 @@ serialize_defaults = {
 	err_type=true,
 	err_cycle=true,
 	pretty=false,
+	bracket_keys=false,
+	compact_arrays=true,
 }
 function serialize(v,opts)
 	if opts then
@@ -265,7 +284,7 @@ function extend_table(target,source,deep)
 	if source == nil then
 		return target
 	end
-	if type(source) ~= 'table' then 
+	if type(source) ~= 'table' then
 		error('extend_table: source not table')
 	end
 	if source == target then
@@ -273,7 +292,7 @@ function extend_table(target,source,deep)
 	end
 	if deep then
 		return extend_table_r(target, source)
-	else 
+	else
 		for k,v in pairs(source) do
 			target[k]=v
 		end
@@ -284,7 +303,7 @@ end
 },
 --[[
 recursive version of extend_table
-not meant to be used on its own 
+not meant to be used on its own
 depends are intentially weird, requiring this will pull in extend_table
 ]]
 {
@@ -292,7 +311,7 @@ depends are intentially weird, requiring this will pull in extend_table
 	depend='extend_table',
 	code=[[
 extend_table_max_depth = 10
-function extend_table_r(target,source,seen,depth) 
+function extend_table_r(target,source,seen,depth)
 	if not seen then
 		seen = {}
 	end
@@ -392,7 +411,7 @@ basename_cam from fsutil
 {
 	name='basename',
 	code=[[
-function basename(path)
+function basename(path,sfx)
 	if not path then
 		return nil
 	end
@@ -427,8 +446,8 @@ function dirname(path)
 		return path
 	end
 	-- remove trailing blah/?
-	dn=string.gsub(path,'[^/]+/*$','')
-	-- invalid, 
+	local dn=string.gsub(path,'[^/]+/*$','')
+	-- invalid,
 	if dn == '' then
 		return nil
 	end
@@ -500,6 +519,19 @@ function mkdir_m(path)
 		end
 	end
 	return true
+end
+]],
+},
+--[[
+make parent directories of specified path
+modified from fsutil
+]]
+{
+	name='mkdir_parent',
+	depend={'mkdir_m','dirname'},
+	code=[[
+function mkdir_parent(path)
+	return mkdir_m(dirname(path))
 end
 ]],
 },
@@ -597,10 +629,11 @@ opts={
 	callback=function(self)
 	end_callback=function(self,status,msg)
 	listall=bool -- pass to os.listdir; currently broken, stat on . or .. fails
+	use_idir=bool -- use os.idir if available, avoids out of memory / timeouts on large dirs, but may have recursion limits
 	-- users may add their own methods or members
 })
 self in callbacks is the fs_iter object, merged with opts
-callback is called on each file/directory 
+callback is called on each file/directory
 must return true to continue processing, or false optionally followed by an error message on error
 the following are available to callback
 self.cur={
@@ -666,14 +699,23 @@ end
 
 function fs_iter:singledir()
 	local cur_dir = self.cur.full
-	local t,err=os.listdir(cur_dir,self.listall)
-	if not t then
-		return false,err
-	end
-	for i,name in ipairs(t) do
-		local status, err = self:singleitem(joinpath(cur_dir,name))
-		if not status then
+	if self.use_idir and os.idir then
+		for name in os.idir(cur_dir,self.listall) do
+			local status, err = self:singleitem(joinpath(cur_dir,name))
+			if not status then
+				return false,err
+			end
+		end
+	else
+		local t,err=os.listdir(cur_dir,self.listall)
+		if not t then
 			return false,err
+		end
+		for i,name in ipairs(t) do
+			local status, err = self:singleitem(joinpath(cur_dir,name))
+			if not status then
+				return false,err
+			end
 		end
 	end
 	return true
@@ -704,13 +746,16 @@ status,err = find_files(paths,opts,func)
 paths=<array of paths to process>
 opts={
 	fmatch='<pattern>', -- match on full path of files, default any (NOTE can match on filename with /<match>$)
-	dmatch='<pattern>', -- match on names of directories, default any 
-	rmatch='<pattern>', -- recurse into directories matching, default any 
+	dmatch='<pattern>', -- match on names of directories, default any
+	rmatch='<pattern>', -- recurse into directories matching, default any
 	dirs=true, -- pass directories to func. otherwise only files sent to func, but dirs are still recursed
 	dirsfirst=false, -- process directories before contained files
 	maxdepth=100, -- maxium depth of directories to recurse into, 0=just process paths passed in, don't recurse
 	martians=bool, -- process non-file, not directory items (vol label,???) default false
+	sizemin=number -- return only files greater than or equal to <number> bytes (note, >2gb will be negative)
+	sizemax=number -- return only files less than or equal to <number> bytes (note, >2gb will be negative)
 	batchsize=20, -- passed to msg_batcher, if used
+	use_idir, -- use  passed to fs_iter
 }
 func defaults to batching the full path of each file
 unless dirsfirst is set, directories will be recursed into before calling func on the containing directory
@@ -742,6 +787,7 @@ function find_files(paths,opts,func)
 	},opts)
 
 	return fs_iter.run(paths,{
+		use_idir=opts.use_idir,
 		ff_check_match=function(self,opts)
 			if self.cur.st.is_file then
 				return not opts.fmatch or string.match(self.cur.full,opts.fmatch)
@@ -753,6 +799,18 @@ function find_files(paths,opts,func)
 				return true
 			end
 			return false
+		end,
+		ff_check_size=function(self,opts)
+			if not self.cur.st.is_file then
+				return true
+			end
+			if opts.sizemin and self.cur.st.size < opts.sizemin then
+				return false
+			end
+			if opts.sizemax and self.cur.st.size > opts.sizemax then
+				return false
+			end
+			return true
 		end,
 		ff_bwrite=function(self,data)
 			if not self.ff_batcher then
@@ -773,6 +831,9 @@ function find_files(paths,opts,func)
 		ff_func=func,
 		ff_item=function(self,opts)
 			if not self:ff_check_match(opts) then
+				return true
+			end
+			if not self:ff_check_size(opts) then
 				return true
 			end
 			return self:ff_func(opts)
@@ -942,7 +1003,7 @@ sends file listing as serialized tables with write_usb_msg
 returns true, or false,error message
 opts={
 	stat=bool|{table}|'/'|'*',
-	listall=bool, 
+	listall=bool,
 	msglimit=number,
 	match="pattern",
 	dirsonly=bool
@@ -958,12 +1019,12 @@ msglimit
 	default 50
 match
 	pattern, file names matching with string.match will be returned
-listall 
-	passed as second arg to os.listdir
+listall
+	passed as second arg to os.listdir / idir
 dirsonly
     only list directories, error if path is a file
 
-may run out of memory on very large directories,
+Prior to CHDK 1.3 may run out of memory or cause PTP timeouts with large dirs
 msglimit can help but os.listdir itself could use all memory
 TODO message timeout is not checked
 ]]
@@ -971,6 +1032,30 @@ TODO message timeout is not checked
 	name='ls',
 	depend={'msg_batcher','joinpath'},
 	code=[[
+function ls_single(opts,b,path,v)
+	if not opts.match or string.match(v,opts.match) then
+		if opts.stat then
+			local st,msg=os.stat(joinpath(path,v))
+			if not st then
+				return false,msg
+			end
+			if opts.stat == '/' then
+				if st.is_dir then
+					b:write(v .. '/')
+				else
+					b:write(v)
+				end
+			elseif opts.stat == '*' then
+				st.name=v
+				b:write(st)
+			end
+		else
+			b:write(v)
+		end
+	end
+	return true
+end
+
 function ls(path,opts_in)
 	local opts={
 		msglimit=50,
@@ -1006,29 +1091,22 @@ function ls(path,opts_in)
 		return true
 	end
 
-	local t,msg=os.listdir(path,opts.listall)
-	if not t then
-		return false,msg
-	end
-	for i,v in ipairs(t) do
-		if not opts.match or string.match(v,opts.match) then
-			if opts.stat then
-				local st,msg=os.stat(joinpath(path,v))
-				if not st then
-					return false,msg
-				end
-				if opts.stat == '/' then
-					if st.is_dir then
-						b:write(v .. '/')
-					else 
-						b:write(v)
-					end
-				elseif opts.stat == '*' then
-					st.name=v
-					b:write(st)
-				end
-			else
-				b:write(v)
+	if os.idir then
+		for v in os.idir(path,opts.listall) do
+			local status,err=ls_single(opts,b,path,v)
+			if not status then
+				return false, err
+			end
+		end
+	else
+		local t,msg=os.listdir(path,opts.listall)
+		if not t then
+			return false,msg
+		end
+		for i,v in ipairs(t) do
+			local status,err=ls_single(opts,b,path,v)
+			if not status then
+				return false, err
 			end
 		end
 	end
@@ -1038,11 +1116,275 @@ end
 ]],
 },
 --[[
+clear Canon firmware lock of keyboard and display when USB connected
+]]
+{
+	name='ptp_ui_unlock',
+	code=[[
+function ptp_ui_unlock(kb_only)
+	local ev
+	if get_buildinfo().os == 'dryos' then
+		if kb_only then
+			ev = 4484
+		else
+			ev = 4482
+		end
+	else
+		if kb_only then
+			ev = 4420
+		else
+			ev = 4418
+		end
+	end
+	post_levent_to_ui(ev)
+end
+]],
+},
+
+--[[
+wait for function to return true or timeout
+]]
+{
+	name='wait_timeout',
+	depend={'extend_table'},
+	code=[[
+function rlib_wait_timeout(func,opts)
+	opts=extend_table({
+		timeout=1000,
+		timeout_error=true,
+		sleep=10,
+		msg='timeout',
+	},opts)
+	local timeout_tick = get_tick_count() + opts.timeout
+	repeat
+		if func() then
+			return true
+		end
+		sleep(opts.sleep)
+	until get_tick_count() > timeout_tick
+	if opts.timeout_error then
+		error(opts.msg)
+	end
+	return false
+end
+]],
+},
+--[[
+wait for file to exist or timeout
+]]
+{
+	name='wait_file',
+	depend={'extend_table','wait_timeout'},
+	code=[[
+function rlib_wait_file(name,opts)
+	opts = extend_table({
+		wait_size_stable=true,
+		timeout=3000,
+		sleep=30,
+		msg=string.format('wait_file %s timeout',name)
+	},opts)
+
+	return rlib_wait_timeout(function()
+		local st = os.stat(name)
+		if st then
+			if not opts.wait_size_stable or (prev_st and st.size == prev_st.size) then
+				return true
+			else
+				prev_st = st
+			end
+		end
+	end,opts)
+end
+]],
+},
+
+--[[
+focus override module (enable_override only works CHDK >= 1.4)
+]]
+{
+	name='focus',
+	code=[=[
+focus={
+	mode_names={'AF','AFL','MF'},
+	valid_modes={}, -- table of name=true
+	modes={}, -- array of usable mode names
+}
+-- initialize valid modes for sd over
+function focus:init()
+	if self.inited then
+		return
+	end
+	-- bits: 1 = AF, 2 = AFL, 3 = MF
+	local modes=0
+	if type(get_sd_over_modes) == 'function' then
+		modes=get_sd_over_modes()
+	end
+	self.modes={}
+	for i=1,3 do
+		if bitand(1,modes) == 1 then
+			table.insert(self.modes,self.mode_names[i])
+		end
+		modes = bitshru(modes,1)
+	end
+	for i,m in ipairs(self.modes) do
+		self.valid_modes[m]=true
+	end
+	self.inited=true
+end
+-- get current AF/AFL/MF state
+function focus:get_mode()
+	if get_prop(require'propcase'.AF_LOCK) == 1 then
+		return 'AFL'
+	end
+	if get_prop(require'propcase'.FOCUS_MODE) == 1 then
+		return 'MF'
+	end
+	return 'AF'
+end
+--[[
+set AF/AFL/MF state
+mode is one of 'AF','MF', 'AFL'
+unless force is true, does not call set functions if already in desired state
+]]
+function focus:set_mode(mode,force)
+	local cur_mode = self:get_mode()
+	if not force and cur_mode == mode then
+		return
+	end
+	if mode == 'AF' then
+		if cur_mode == 'MF' then
+			set_mf(false)
+		elseif cur_mode == 'AFL' then
+			set_aflock(false)
+		end
+	elseif mode == 'AFL' then
+		if cur_mode == 'MF' then
+			set_mf(false)
+		end
+		set_aflock(true)
+	elseif mode == 'MF' then
+		if cur_mode == 'AFL' then
+			set_aflock(false)
+		end
+		set_mf(true)
+	end
+end
+--[[
+set to a mode that allows override, defaulting to prefmode, or the current mode if not set
+]]
+function focus:enable_override(prefmode)
+	self:init()
+	-- override not supported or in playback
+	if #self.modes == 0 or not get_mode() then
+		return false
+	end
+	-- no pref, default to overriding in current mode if possible
+	if not prefmode then
+		prefmode=self:get_mode()
+	end
+	local usemode
+	if self.valid_modes[prefmode] then
+		usemode = prefmode
+	else
+		-- if pref is MF or AFL, prefer locked if available
+		if prefmode == 'MF' and self.valid_modes['AFL'] then
+			usemode = 'AFL'
+		elseif prefmode == 'AFL' and self.valid_modes['MF'] then
+			usemode = 'MF'
+		elseif self.valid_modes[self:get_mode()] then
+			usemode = self:get_mode()
+		else
+ 			-- no pref, use first available
+			usemode = self.modes[1]
+		end
+	end
+	self:set_mode(usemode)
+	return true
+end
+function focus:set(dist)
+	set_focus(dist)
+end
+]=],
+},
+--[[
+get drive mode / self timer information
+returns: {
+	drive_mode=<n> -- PROPCASE_DRIVE_MODE prop value
+	timer_mode=<n> -- PROPCASE_TIMER_MODE value, or 0 if not defined
+	is_cont=<bool> -- any continuous mode
+	is_cont_af=<bool> -- continuous with AF
+	is_timer=<bool> -- any self timer mode
+	is_timer_cust=<bool> -- custom timer
+	is_timer_face=<bool> -- face timer
+	is_std=<bool> -- standard, not in cont or face timer, but may be in other special shooting modes like wink / smile detect
+	timer_shots=<n> -- custom timer shots (not available on all cams, nil if not supported or not in cust timer)
+	timer_delay=<n> -- custom timer delay (not available on all cams, nil if not supported or not in cust timer)
+}
+]]
+{
+	name='drive_mode_info',
+	code=[[
+function rlib_get_drive_mode_info()
+	local props=require'propcase'
+	local r = {}
+	r.drive_mode = get_prop(props.DRIVE_MODE)
+	if props.TIMER_MODE then
+		r.timer_mode = get_prop(props.TIMER_MODE)
+	else
+		if get_propset() == 1 then
+			r.timer_mode = get_prop(219) -- not present in older propset.h
+		else
+			r.timer_mode = 0
+		end
+	end
+	if get_propset() == 1 then
+		if r.drive_mode == 1 then
+			r.is_cont = true
+		end
+		if r.drive_mode == 2 then
+			r.is_timer = true
+			if r.timer_mode == 2 then
+				r.is_timer_cust = true
+			end
+		end
+	elseif get_propset() >= 2 then
+		if r.drive_mode == 1 then
+			r.is_cont = true
+		elseif r.drive_mode == 2 then
+			r.is_cont = true
+			r.is_cont_af = true
+		end
+		if r.timer_mode > 0 then
+			r.is_timer = true
+			if r.timer_mode == 3 then
+				r.is_timer_cust = true
+			elseif r.timer_mode == 4 then
+				r.is_timer_face = true
+			end
+		end
+	end
+	-- face can also have a shots count, but a different prop in most propsets
+	if r.is_timer_cust then
+		-- not props on all cams
+		if props.TIMER_SHOTS then
+			r.timer_shots = get_prop(props.TIMER_SHOTS)
+		end
+		if props.TIMER_DELAY then
+			r.timer_delay = get_prop(props.TIMER_DELAY)
+		end
+	end
+	r.is_std = not (r.is_timer or r.is_cont)
+	return r
+end
+]],
+},
+--[[
 support for cli shoot command, set exposure params
 TODO could check that ISO mode gets set, esp for 1.2 which ignores unknown values
 ]]
 {
 	name='rlib_shoot_common',
+	depend={'focus'},
 	code=[[
 function rlib_shoot_init_exp(opts)
 	if opts.tv then
@@ -1067,8 +1409,58 @@ function rlib_shoot_init_exp(opts)
 		set_nd_filter(opts.nd)
 	end
 	if opts.sd then
-		set_focus(opts.sd)
+		if not opts.sdnoenable then
+			focus:init()
+			if not focus:enable_override(opts.sdprefmode) then
+				error('focus override not available')
+			end
+			focus:set(opts.sd)
+		else
+			set_focus(opts.sd)
+		end
 	end
+end
+]],
+},
+--[[
+create a dummy of the current image, used to prevent remoteshoot from crashing on play/shutdown
+]]
+{
+	name='rlib_shoot_filedummy',
+	depend={'mkdir_m'},
+	code=[[
+function rlib_shoot_filedummy()
+	local dir=get_image_dir()
+	local status,err=mkdir_m(dir)
+	if not status then
+		return false,err
+	end
+	local exts = {}
+	if type(get_canon_image_format) == 'function' then
+		local fmt = get_canon_image_format()
+		if bitand(fmt,1) == 1 then
+			table.insert(exts,'JPG')
+		end
+		if bitand(fmt,2) == 2 then
+			table.insert(exts,'CR2')
+		end
+	else
+		table.insert(exts,'JPG')
+	end
+
+	for i,e in ipairs(exts) do
+		local fn=string.format('%s/IMG_%04d.%s',dir,get_exp_count(),e)
+		-- don't overwrite an actual file if it exists
+		if not os.stat(fn) then
+			local fh,err=io.open(fn,'wb')
+			if not fh then
+				return false,err
+			end
+			fh:close()
+			os.utime(fn)
+		end
+	end
+	return true
 end
 ]],
 },
@@ -1084,6 +1476,18 @@ function rlib_shoot(opts)
 
 	rlib_shoot_init_exp(opts)
 
+	local save_cfmt
+	if opts.cfmt then
+		if type(get_canon_image_format) ~= 'function' then
+			return false,'CHDK build does not support Canon format control'
+		end
+		if opts.cfmt ~= 1 and not get_canon_raw_support() then
+			return false,'platform does not support Canon raw'
+		end
+		save_cfmt = get_canon_image_format()
+		set_canon_image_format(opts.cfmt)
+	end
+
 	local save_raw
 	if opts.raw then
 		save_raw=get_raw()
@@ -1097,13 +1501,31 @@ function rlib_shoot(opts)
 	shoot()
 	local r
 	if opts.info then
+		local raw_state = get_raw() -- hack for 1.3 compat
+		if type(raw_state) == 'number' then
+			raw_state = (raw_state == 1)
+		end
 		r = {
 			dir=get_image_dir(),
 			exp=get_exp_count(),
-			raw=(get_raw() == 1),
+			raw=raw_state,
 		}
+		if type(get_canon_image_format) == 'function' then
+			r.canon_fmt = get_canon_image_format()
+		else
+			r.canon_fmt = 1 -- jpeg
+		end
+		r.canon_jpg = (bitand(r.canon_fmt,1) == 1)
+		r.canon_raw = (bitand(r.canon_fmt,2) == 2)
+
+		if r.canon_raw then
+			-- CHDK raw exception for canon raw
+			if (get_config_value(1251) == 1) then
+				r.raw = false
+			end
+		end
 		if r.raw then
-			r.raw_in_dir = (get_config_value(35) == 1)
+			r.raw_dir_opt = get_config_value(35)
 			r.raw_pfx = get_config_value(36)
 			r.raw_ext = get_config_value(37)
 			r.dng = (get_config_value(226) == 1)
@@ -1114,23 +1536,69 @@ function rlib_shoot(opts)
 	else
 		r=true
 	end
-	if save_raw then
+	if save_raw ~= nil then
 		set_raw(save_raw)
 	end
 	if save_dng then
 		set_config_value(226,save_dng)
+	end
+	if save_cfmt then
+		set_canon_image_format(save_cfmt)
 	end
 	return r
 end
 	]],
 },
 --[[
-TODO temp - should be integrated into above
+return chdk capture mode, 0 = play, other = mode number
+]]
+{
+	name='get_capture_mode',
+	code=[[
+function rlib_get_capture_mode()
+	local isrec, _, mode = get_mode()
+	if not isrec then
+		return 0
+	end
+	return bitand(mode,255)
+end
+]]
+},
+--[[
+switch play rec mode (0, false = play, ~0, true = rec) and wait for switch to complete
+timeout defaults to 3 seconds
+returns status[,message]
+]]
+{
+	name='switch_mode',
+	code=[[
+function rlib_switch_mode(mode,timeout)
+	timeout = timeout or 3000
+	if tonumber(mode) then
+		mode = (mode ~= 0)
+	end
+	if mode == get_mode() then
+		return true,'already in '..({[false]='play',[true]='rec'})[mode]
+	end
+	switch_mode_usb(mode)
+	local timeout = get_tick_count() + timeout
+	repeat
+		if  mode == get_mode()then
+			return true
+		end
+		sleep(10)
+	until get_tick_count() >= timeout
+	return false,'timeout'
+end
+]]
+},
+--[[
 support for cli remote capture shoot command
-starts shoot, doesn't wait for it to finish
+initializes remote shoot settings
 ]]
 {
 	name='rs_shoot_init',
+	depend={'serialize_msgs','drive_mode_info'},
 	code=[[
 function rs_init(opts)
 	local rec,vid = get_mode()
@@ -1140,17 +1608,8 @@ function rs_init(opts)
 	if type(init_usb_capture) ~= 'function' then
 		return false, 'usb capture not supported'
 	end
-	if bitand(get_usb_capture_support(),opts.fformat) ~= opts.fformat then
-		return false, 'unsupported format'
-	end
-	if not init_usb_capture(opts.fformat,opts.lstart,opts.lcount) then
-		return false, 'init failed'
-	end
-	if opts.cap_timeout then
-		set_usb_capture_timeout(opts.cap_timeout)
-	end
 	if opts.cont then
-		if get_prop(require'propcase'.DRIVE_MODE) ~= 1 then
+		if not rlib_get_drive_mode_info().is_cont then
 			return false, 'not in continuous mode'
 		end
 		if opts.int and opts.int > 0 and type(hook_shoot) ~= 'table' then
@@ -1160,21 +1619,63 @@ function rs_init(opts)
 	if opts.shots and opts.shots <= 0 then
 		return false, 'invalid shot count'
 	end
-	return true
+	if bitand(get_usb_capture_support(),opts.fformat) ~= opts.fformat then
+		return false, 'unsupported format'
+	end
+	local saved_canon_fmt
+	if type(get_canon_raw_support) == 'function' and get_canon_raw_support() then
+		local canon_fmt
+		if bitand(opts.fformat,9) == 9 then
+			canon_fmt = 3
+		elseif bitand(opts.fformat,8) == 8 then
+			canon_fmt = 2
+		else
+			canon_fmt = 1
+		end
+		if canon_fmt ~= get_canon_image_format() then
+			saved_canon_fmt = get_canon_image_format()
+			if not set_canon_image_format(canon_fmt) then
+				return false, 'unsupported canon format'
+			end
+		end
+	end
+	if not init_usb_capture(opts.fformat,opts.lstart,opts.lcount) then
+		return false, 'init failed'
+	end
+	if opts.cap_timeout then
+		set_usb_capture_timeout(opts.cap_timeout)
+	end
+	return {saved_canon_fmt = saved_canon_fmt}
 end
 ]],
 },
 {
 	name='rs_shoot',
-	depend={'rlib_shoot_common'},
+	depend={'rlib_shoot_common','rlib_shoot_filedummy'},
 -- TODO should use shoot hook count for chdk 1.3, exp count may have issues in some ports
 	code=[[
+function rs_error(msg)
+	init_usb_capture(0)
+	if type(hook_shoot) == 'table' then
+		hook_shoot.set(0)
+	end
+	release('shoot_full_only')
+	error(msg,2)
+end
+
+function rs_do_filedummy(opts)
+	if not opts.filedummy then
+		return
+	end
+	rlib_shoot_filedummy()
+end
 function rs_shoot_full(opts)
 	local shot=0
 	local m
 	repeat
 		local tnext=get_tick_count() + opts.int
 		shoot()
+		rs_do_filedummy(opts)
 		shot = shot + 1
 		if shot >= opts.shots then
 			return
@@ -1184,7 +1685,7 @@ function rs_shoot_full(opts)
 			tsleep = 0
 		end
 		m=read_usb_msg(tsleep)
-	until m == 'quit'
+	until m == 'stop'
 end
 function rs_shoot_multi_init()
 	local state={
@@ -1206,8 +1707,13 @@ end
 function rs_shoot_multi_wait(state,opts)
 	local t0 = get_tick_count()
 	while true do
+		if state.wait_callback then
+			if not state:wait_callback(opts) then
+				return false
+			end
+		end
 		m=read_usb_msg(10)
-		if m == 'quit' then
+		if m == 'stop' then
 			return false
 		end
 		local exp_count = get_exp_count()
@@ -1217,10 +1723,10 @@ function rs_shoot_multi_wait(state,opts)
 			return true
 		end
 		if get_tick_count() - t0 > opts.exp_count_timeout then
-			return false
+			rs_error('exp_count wait timeout')
 		end
 		if type(get_usb_capture_target) == 'function' and get_usb_capture_target() == 0 then
-			return false
+			rs_error('usb capture canceled')
 		end
 	end
 end
@@ -1228,11 +1734,11 @@ end
 function rs_shoot_wait_hook(opts)
 	local t0=get_tick_count()
 	repeat
-		if read_usb_msg(10) == 'quit' then
+		if read_usb_msg(10) == 'stop' then
 			return false
 		end
 		if get_tick_count() - t0 > opts.exp_count_timeout then
-			return false
+			rs_error('hook_shoot wait timeout')
 		end
 	until hook_shoot.is_ready()
 	return true
@@ -1246,15 +1752,18 @@ function rs_shoot_cont_hook(opts)
 	end
 	local last_shot_tick
 	press('shoot_full')
-	local m
 	repeat
 		if not rs_shoot_wait_hook(opts) then
 			break
 		end
+		-- if final shot, release immediately after hook to prevent extra shots
+		if state.shots == opts.shots - 1 then
+			release'shoot_full'
+		end
 		if last_shot_tick then
 			local tsleep = last_shot_tick + opts.int - get_tick_count()
 			if tsleep > 0 then
-				if read_usb_msg(tsleep) == 'quit' then
+				if read_usb_msg(tsleep) == 'stop' then
 					break
 				end
 			end
@@ -1264,6 +1773,7 @@ function rs_shoot_cont_hook(opts)
 		if not rs_shoot_multi_wait(state,opts) then
 			break
 		end
+		rs_do_filedummy(opts)
 	until state.shots >= opts.shots
 	hook_shoot.set(0)
 	release('shoot_full')
@@ -1274,11 +1784,27 @@ function rs_shoot_cont(opts)
 	if not state then
 		return
 	end
+	-- if shoot hooks available, release when hooked reached to avoid extra shots
+	if type(hook_shoot) == 'table' then
+		state.hook_shoot_count = hook_shoot.count()
+		state.wait_callback = function(state,opts)
+			local c = hook_shoot.count()
+			if state.hook_shoot_count ~= c then
+				if state.shots >= opts.shots - 1 then
+					release('shoot_full')
+				end
+				state.hook_shoot_count = c
+			end
+			return true
+		end
+	end
+
 	press('shoot_full')
 	repeat
 		if not rs_shoot_multi_wait(state,opts) then
 			break
 		end
+		rs_do_filedummy(opts)
 	until state.shots >= opts.shots
 	release('shoot_full')
 end
@@ -1288,17 +1814,32 @@ function rs_shoot_quick(opts)
 	if not state then
 		return
 	end
+	-- if shoot hooks available, release when hooked reached to avoid extra shots
+	if type(hook_shoot) == 'table' then
+		state.wait_callback = function(state,opts)
+			local c = hook_shoot.count()
+			if state.hook_shoot_count ~= c then
+				release('shoot_full_only')
+				state.hook_shoot_count = c
+			end
+			return true
+		end
+	end
 	while true do
 		local t_next=get_tick_count() + opts.int
+		if type(hook_shoot) == 'table' then
+			state.hook_shoot_count = hook_shoot.count()
+		end
 		press('shoot_full_only')
 		local status = rs_shoot_multi_wait(state,opts)
 		release('shoot_full_only')
+		rs_do_filedummy(opts)
 		if state.shots >= opts.shots or not status then
 			break
 		end
 		local tsleep=t_next - get_tick_count()
 		if tsleep > 0 then
-			if read_usb_msg(tsleep) == 'quit' then
+			if read_usb_msg(tsleep) == 'stop' then
 				break
 			end
 		end
@@ -1314,7 +1855,7 @@ function rs_shoot(opts)
 		opts.shots=1
 	end
 	if not opts.exp_count_timeout then
-		opts.exp_count_timeout = 5000
+		opts.exp_count_timeout = 15000
 	end
 	if not opts.shoot_hook_timeout then
 		opts.shoot_hook_timeout=10000
@@ -1339,12 +1880,35 @@ end
 ]],
 },
 --[[
+remote shoot cleanup - wait for get_shooting() to go false,
+clear capture flags, restore any saved settings
+]]
+{
+	name='rs_shoot_cleanup',
+	code=[[
+function rs_cleanup(opts)
+	if not opts.nowait then
+		local i = 0
+		while get_shooting() and i < 200 do
+			sleep(10)
+			i = i+1
+		end
+	end
+	init_usb_capture(0)
+	if opts and opts.saved_canon_fmt then
+		set_canon_image_format(opts.saved_canon_fmt)
+	end
+end
+	]],
+},
+--[[
 search memory for an aligned 32 bit word
 mem_search_word{
 	start:number
 	last:number
 	count:number
 	val:number
+	limit:number
 }
 ]]
 {
@@ -1355,24 +1919,32 @@ function mem_search_word(opts)
 	if type(opts) ~= 'table' then
 		error('missing opts')
 	end
-	local start = tonumber(opts.start)
-	local last 
+	local _peek = peek
+	local start = opts.start
+	local last
 	if opts.count then
-		last = start + (tonumber(opts.count)-1)*4
+		last = start + (opts.count-1)*4
 	else
-		last = tonumber(opts.last)
+		last = opts.last
 	end
-	local val = tonumber(opts.val)
+	local val = opts.val
+	local limit = opts.limit
 	if not start or not last or last < start or not val then
 		error('bad opts')
 	end
+	local matches=0
 	set_yield(-1,100)
 	local b=msg_batcher()
 	for i=start,last,4 do
-		local v = peek(i)
-		if v == val then
+		if _peek(i) == val then
 			if not b:write(i) then
 				error('write failed')
+			end
+			if limit then
+				matches = matches+1
+				if matches >= limit then
+					break
+				end
 			end
 		end
 	end
@@ -1401,13 +1973,13 @@ msg_shell.cmds={
 	echo=function(msg)
 		if write_usb_msg(msg) then
 			print("ok")
-		else 
+		else
 			print("fail")
 		end
 	end,
 	exec=function(msg)
 		local f,err=loadstring(string.sub(msg,5));
-		if f then 
+		if f then
 			local r={f()} -- pcall would be safer but anything that yields will fail
 			for i, v in ipairs(r) do
 				write_usb_msg(v)
@@ -1419,7 +1991,7 @@ msg_shell.cmds={
 	end,
 	pcall=function(msg)
 		local f,err=loadstring(string.sub(msg,6));
-		if f then 
+		if f then
 			local r={pcall(f)}
 			for i, v in ipairs(r) do
 				write_usb_msg(v)
@@ -1434,7 +2006,7 @@ msg_shell.idle = function()
 	sleep(msg_shell.sleep)
 end
 msg_shell.run=function(self)
-	repeat 
+	repeat
 		local msg=read_usb_msg(self.read_msg_timeout)
 		if msg then
 			local cmd = string.match(msg,'^%w+')
@@ -1442,8 +2014,10 @@ msg_shell.run=function(self)
 				self.cmds[cmd](msg)
 			elseif type(self.default_cmd) == 'function' then
 				self.default_cmd(msg)
+			elseif cmd then
+				print('undefined command: '..tostring(cmd))
 			else
-				print('undefined command: '..cmd)
+				print('unexpected message: '..tostring(msg))
 			end
 		else
 			self.idle()

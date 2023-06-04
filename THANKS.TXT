@@ -4,19 +4,31 @@ Acknowledgement and copyright information is given below.
 ptpcam http://libptp.sourceforge.net/
 ptpcam is distributed under the GPL, as described in COPYING
 
-Lua http://www.lua.org/ 
-Copyright (c) 1994-2011 Lua.org, PUC-Rio.
+libgphoto2 http://www.gphoto.org/proj/libgphoto2/
+Copyright (C) 2001 Mariusz Woloszyn <emsi@ipartners.pl>
+Copyright (C) 2003-2020 Marcus Meissner <marcus@jet.franken.de>
+Copyright (C) 2006-2008 Linus Walleij <triad@df.lth.se>
+libgphoto2 is licensed under the LGPL
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html
+
+Lua http://www.lua.org/
+Copyright (c) 1994-2020 Lua.org, PUC-Rio.
 
 IUP http://www.tecgraf.puc-rio.br/iup/
-Copyright (c) 1994-2012 Tecgraf, PUC-Rio.
+Copyright (c) 1994-2020 Tecgraf, PUC-Rio.
 
 CD http://www.tecgraf.puc-rio.br/cd/
-Copyright (c) 1994-2012 Tecgraf, PUC-Rio.
+Copyright (c) 1994-2020 Tecgraf, PUC-Rio.
 
-LuaFileSystem http://keplerproject.github.com/luafilesystem/
-Copyright (c) 2003 Kepler Project.
+LuaFileSystem http://keplerproject.github.io/luafilesystem/
+Copyright (c) 2003-2020 Kepler Project.
 
-Lua, IUP, CD and LuaFileSystem are distributed under the following license:
+Lua-Signal https://github.com/LuaDist/lua-signal
+Copyright (C) 2007  Patrick J. Donnelly (batrick at batbytes.com)
+Note developer site is https://github.com/batrick/lua-signal but
+latest version is not Lua 5.2 compatible
+
+Lua, IUP, CD, LuaFileSystem and Lua are distributed under the following license:
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

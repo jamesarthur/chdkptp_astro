@@ -66,7 +66,7 @@ end
 function tcb_methods.describe_state(self)
 	local sbits = util.bit_unpack(self.state)
 	local r={}
-	for i=0,#m.task_states-1 do 
+	for i=0,#m.task_states-1 do
 		if sbits[i] == 1 then
 			table.insert(r,m.task_states[i])
 		end

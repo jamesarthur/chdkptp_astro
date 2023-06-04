@@ -122,7 +122,7 @@ does not wait for execution to complete or check for runtime errors
 function m.shoot(opts)
 	if opts then
 		optstr = util.serialize(opts)
-	else 
+	else
 		optstr = '{}'
 	end
 	m.exec([[

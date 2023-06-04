@@ -1,4 +1,6 @@
 --[[
+(C)2014 msl
+
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
   published by the Free Software Foundation.
@@ -18,23 +20,15 @@ module for user tab in gui
 a place for user defined stuff
 ]]
 
-local m={}
-
-function m.get_container_title()
-    return "User"
-end
-
-function m.init()
-    m.dest = "" -- destination path for download, default is chdkptp dir
-    return
-end
+local m = require('gui_user_base')
 
 function m.get_container()
-    local usertab = iup.vbox{
-        margin="4x4",
-        m.remote_capture_ui(),
-    }
-    return usertab
+	return iup.hbox{
+		margin="4x4",
+		gap="10",
+		m.remote_capture_ui(),
+		m.dcim_download_ui(),
+	}
 end
 
 --[[
@@ -44,48 +38,86 @@ remote capture function as gui function
 * DNG Remote Shoot - shoot and save a DNG file in the destination
 ]]
 function m.remote_capture_ui()
-    local gui_frame = iup.frame{
-        title="Remote Capture",
-        iup.vbox{
-            gap="10",
-            iup.button{
-                title="Destination",
-                size="75x15",
-                fgcolor="0 0 255",
-                action=function(self)
-                    local dlg=iup.filedlg{
-                        dialogtype = "DIR",
-                        title = "Destination",
-                    }
-                    dlg:popup(iup_centerparent, iup_centerparent)
-                    if dlg.status == "0" then
-                        m.dest = dlg.value
-                        gui.infomsg("download destination %s\n", m.dest)
-                    end
-                end,
-            },
-            iup.button{
-                title="JPG Remote Shoot",
-                size="75x15",
-                fgcolor="255 0 0",
-                tip="Does not work for all cameras!",
-                action=function(self)
-                    local cmd = m.dest ~= "" and string.format("rs '%s'", m.dest) or "rs"
-                    add_status(cli:execute(cmd))
-                end,
-            },
-            iup.button{
-                title="DNG Remote Shoot",
-                size="75x15",
-                fgcolor="255 0 0",
-                action=function(self)
-                    local cmd = m.dest ~= "" and string.format("rs '%s' -dng", m.dest) or "rs -dng"
-                    add_status(cli:execute(cmd))
-                end,
-            },
-        },
-    }
-    return gui_frame
+	return iup.frame{
+		title="Remote Capture",
+		iup.vbox{
+			gap="10",
+			iup.button{
+				title="Destination",
+				size="75x15",
+				fgcolor="0 0 255",
+				--current path as tooltip
+				tip=m.rs_dest,
+				action=function(self)
+					m.set_remote_capture_destination()
+					--update path as tooltip
+					self.tip = m.rs_dest
+				end,
+			},
+			iup.button{
+				title="JPG Remote Shoot",
+				size="75x15",
+				fgcolor="255 0 0",
+				tip="Does not work for all cameras!",
+				action=function(self) m.do_jpg_remote_shoot() end,
+			},
+			iup.button{
+				title="DNG Remote Shoot",
+				size="75x15",
+				fgcolor="255 0 0",
+				action=function(self) m.do_dng_remote_shoot() end,
+			},
+		},
+	}
+end
+
+--[[
+-simple GUI mode for image download
+-default destination is chdkptp/images
+-subdirs are organized by capture date
+-optional download from A/RAW & GPS data
+]]
+function m.dcim_download_ui()
+	return iup.frame{
+		title="Pic&Vid Download",
+		iup.vbox{
+			gap="10",
+			iup.button{
+				title="Destination",
+				size="75x15",
+				fgcolor="0 0 255",
+				--current path as tooltip
+				tip=m.imdl_dest,
+				action=function(self)
+					m.set_download_destination()
+					--update path as tooltip
+					self.tip = m.imdl_dest
+				end,
+			},
+			iup.button{
+				title="Download",
+				size="75x15",
+				fgcolor="0 0 0",
+				tip="Does not overwrite existing files",
+				action=function(self) m.do_download() end,
+			},
+			iup.toggle{
+				title = "incl. A/RAW",
+				value = m.imdl_raw,
+				action=function(self, state) m.toggle_raw(state==1) end,
+			},
+			iup.toggle{
+				title = "incl. GPS data",
+				value = m.imdl_gps,
+				action=function(self, state) m.toggle_gps(state==1) end,
+			},
+			iup.toggle{
+				title = "pretend",
+				value = m.imdl_pre,
+				action=function(self, state) m.toggle_pretend(state==1) end,
+			},
+		},
+	}
 end
 
 return m

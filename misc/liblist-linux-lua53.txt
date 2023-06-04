@@ -1,0 +1,8 @@
+cd/libcdlua53.so
+cd/libcdcontextplus.so
+cd/libcdluacontextplus53.so
+cd/libcd.so
+iup/libiupcd.so
+iup/libiup.so
+iup/libiuplua53.so
+iup/libiupluacd53.so

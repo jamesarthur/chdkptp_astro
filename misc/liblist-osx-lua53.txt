@@ -1,0 +1,8 @@
+iup/libiup.dylib
+iup/libiupcd.dylib
+iup/libiuplua53.dylib
+iup/libiupluacd53.dylib
+cd/libcd.dylib
+cd/libcdlua53.dylib
+lua/liblua.dylib
+lua/liblua53.dylib

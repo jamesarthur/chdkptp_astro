@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2014 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2021 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,14 +11,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
 ]]
 --[[
 module for gui timer/scheduler
 ]]
 local m={
-	now=ustime.new(),
+	now=ticktime.get(),
 	pending={},
 	repeating={},
 }
@@ -34,14 +33,13 @@ end
 call scheduled function after time ms
 ]]
 function m.run_after(time,fn,data)
-	local t=ustime.new()
-	t:addms(time)
+	local t=ticktime.get() + time/1000
 	table.insert(m.pending,{time=t,fn=fn,data=data})
 	m.ensure_timer_running()
 end
 function m.run_repeat(time,fn,data)
-	t = {
-		last=ustime.new(),
+	local t = {
+		last=ticktime.get(),
 		time=time,
 		fn=fn,
 		data=data,
@@ -55,11 +53,11 @@ function m.run_repeat(time,fn,data)
 end
 
 m.tick=errutil.wrap(function()
-	m.now:get()
+	m.now = ticktime.get()
 	local num_pending = 0
 	for k,v in pairs(m.pending) do
 --		printf('check %f %f\n',v.time:float(),m.now:float())
-		if v.time:float() < m.now:float() then
+		if v.time < m.now then
 --			printf('run\n')
 			m.pending[k]=nil
 			v:fn()
@@ -69,8 +67,8 @@ m.tick=errutil.wrap(function()
 	end
 	local num_repeating = 0
 	for k,v in pairs(m.repeating) do
-		if v.last:diffms(now) > v.time then
-			v.last:get() -- TODO might want to check for run time > interval to avoid pile-up
+		if (m.now - v.last)*1000 > v.time then
+			v.last = ticktime.get() -- TODO might want to check for run time > interval to avoid pile-up
 						-- could update after run
 			v:fn()
 		end
@@ -85,15 +83,26 @@ end)
 function m.init_timer(time)
 	if not time then
 		time = 50
-	end 
+	end
+	m.time = time
 	if m.timer then
 		iup.Destroy(m.timer)
 	end
-	m.timer = iup.timer{ 
+	m.timer = iup.timer{
 		time = tostring(time),
 		action_cb = m.tick,
 		run = "NO", -- first scheduled action will start
 		-- note for some reason, creating with YES fails occasionally, setting after seems OK
 	}
+	m.is_init = true
 end
+
+function m.is_initialized()
+	return m.is_init
+end
+
+function m.min_interval()
+	return m.time
+end
+
 return m
