@@ -4,7 +4,7 @@ and chdkptp respectively. To run these, use the corresponding .sh scripts.
 The CLI binary should have no external dependencies that aren't part of the
 standard system, although differing versions of shared libraries like libc
 may still cause problems. You may need to install a libusb-0.1 compatibility
-package (called libusb on Fedora, libusb-0.1 on Debian based distros)
+package (called libusb on Fedora, libusb-0.1 on Ubuntu)
 
 These builds may or may not be compatible with distributions different
 from the ones used to build. Building from source on the target distribution
@@ -12,7 +12,7 @@ using misc/setup-ext-libs.bash should be straightforward on most Linux
 distributions and is recommended when possible.
 
 The GUI executable requires IUP and CD libraries. Since these are generally
-not available in standard Linux repositories and are non-trivial to build, a
+not available in standard Linux repositories and are non-trivial to build, a 
 minimum set of libraries is included in the binary packages.
 
 The GUI libraries may depend on system libraries (x11, gtk etc) which are not

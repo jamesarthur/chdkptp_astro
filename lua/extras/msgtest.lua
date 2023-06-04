@@ -80,7 +80,7 @@ end
 
 function m.fmt_memstats(stats)
 	local min=1000000000
-	local max=0
+	local max=0 
 	local total = 0
 	if #stats == 0 then
 		return "no stats"
@@ -173,7 +173,7 @@ function m.test_msg(len)
 	con:write_msg(s)
 	m.send_time = m.send_time + ticktime.elapsed(t0)
 	local r = con:wait_msg({mtype='user'})
-	if s == r.value then
+	if s == r.value then 
 		m.detailmsg('ok\n')
 	else
 		m.fail_count = m.fail_count + 1
@@ -182,7 +182,7 @@ function m.test_msg(len)
 			-- TODO should probably save and print at the end so they don't get lost in scrollback
 			if m.opts.showfailed == 'hex' then
 				printf('sent:\n%s\nrecv:\n%s\n',util.hexdump(s),util.hexdump(tostring(r.value)))
-			else
+			else 
 				printf('>%s\n<%s\n',util.str_escape_strict(s),util.str_escape_strict(tostring(r.value)))
 			end
 		end
@@ -200,7 +200,7 @@ end
 
 function m.test(opts)
 	opts = util.extend_table_multi({},{default_opts,opts})
-
+	
 	m.opts = opts
 
 	-- backward compatible for version that only supported positive inc
@@ -217,7 +217,7 @@ function m.test(opts)
 			error("noscript cannot be combined with checkmem")
 		end
 	end
-	if not opts.size then
+	if not opts.size then 
 		error("missing size")
 	end
 
@@ -276,7 +276,7 @@ function m.test(opts)
 		if opts.sizeinc and size ~= opts.sizeend then
 			size = size + opts.sizeinc
 		end
-	end
+	end 
 	return m.finish_test()
 end
 

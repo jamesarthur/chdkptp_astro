@@ -3,7 +3,7 @@ camera side "glue" script to use rawopint v0.25 with remoteshoot
 http://chdk.wikia.com/wiki/Lua/Scripts:_Raw_Meter_Intervalometer
 
 -shots and -int options to remoteshoot are passed through
-use like
+use like 
 rs -script=rawopint_rs.lua -shots=100 -int=5
 
 remoteshoot file format selection with -jpg, -raw works as normal

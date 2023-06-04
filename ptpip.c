@@ -309,7 +309,7 @@ uint16_t ptpip_getresp(PTPIPParams *params, PTPContainer *ptp)
 
 uint16_t ptpip_transaction(PTPIPParams *params, PTPContainer *ptp, uint16_t flags, unsigned int sendlen, char**data)
 {
-	if ((params==NULL) || (ptp==NULL))
+	if ((params==NULL) || (ptp==NULL)) 
 		return PTP_ERROR_BADPARAM;
 
 	ptp->Transaction_ID=params->transaction_id++;
@@ -324,10 +324,10 @@ uint16_t ptpip_transaction(PTPIPParams *params, PTPContainer *ptp, uint16_t flag
 }
 
 
-int main(int argc, char **argv)
+int main(int argc, char **argv) 
 {
 	PTPIPParams params;
-
+    
     if (argc != 2) {
         printf("usage: %s <camera address>\n", argv[0]);
         return 1;

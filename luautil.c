@@ -90,12 +90,7 @@ void lu_pusharray_raw_u32(lua_State *L, int count, uint32_t *values) {
 	lua_createtable(L,count,0);
 	int i;
 	for(i=0;i<count;i++) {
-// may be out of range if LUA_INTEGER is 32 bits
-#if (LUA_MAXINTEGER > UINT32_MAX)
-		lua_pushinteger(L,values[i]);
-#else
 		lua_pushnumber(L,values[i]);
-#endif
 		lua_rawseti(L,-2,i+1);
 	}
 }
@@ -103,7 +98,7 @@ void lu_pusharray_raw_u16(lua_State *L, int count, uint16_t *values) {
 	lua_createtable(L,count,0);
 	int i;
 	for(i=0;i<count;i++) {
-		lua_pushinteger(L,values[i]);
+		lua_pushnumber(L,values[i]);
 		lua_rawseti(L,-2,i+1);
 	}
 }

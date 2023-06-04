@@ -18,7 +18,6 @@ requires patched CHDK
 !require'extras/camcon'.init_cli()
 mcamcon drysh
 ]]
-local argparser = require'argparser'
 m={}
 m.init_cli = function()
 	cli:add_commands{
@@ -26,7 +25,7 @@ m.init_cli = function()
 		names={'mcamcon'},
 		help='interact with camera console',
 		arghelp="[eventproc [-n]] [-r]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			n=false,
 			r=false
 		},
@@ -41,7 +40,7 @@ REQUIRES special build http://chdk.setepontos.com/index.php?topic=11029.msg10823
    -r assume camera script is already running
 ]],
 
-		func=function(self,args)
+		func=function(self,args) 
 			local opts={
 				task = args[1],
 				autoexit = not args.n,

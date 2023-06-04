@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2022 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2020 <reyalp (at) gmail dot com>
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
   published by the Free Software Foundation.
@@ -10,18 +10,17 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
 ]]
 --[[
 lua helper functions for working with the chdk.* c api
 ]]
 
-local ptpevp = require'ptpevp'
 local chdku={}
 chdku.rlibs = require('rlibs')
 chdku.sleep = sys.sleep -- to allow override
-chdku.nop = function() end -- dummy callback
-
 -- format a script message in a human readable way
 function chdku.format_script_msg(msg)
 	if msg.type == 'none' then
@@ -92,114 +91,9 @@ function chdku.ts_pc2cam(tspc)
 end
 
 --[[
-format PTP parameters for a debug string
-]]
-function chdku.dbg_fmt_ptp_params(params)
-	local r={}
-	for i,v in ipairs(params) do
-		if type(v) == 'number' then
-			table.insert(r,('0x%x (%d)'):format(v,v))
-		else
-			table.insert(r,('(%s:%s)'):format(type(v),tostring(v)))
-		end
-	end
-	return table.concat(r,', ')
-end
-
---[[
 connection methods, added to the connection object
 ]]
 local con_methods = {}
-
--- allow other modules to extend / override
-chdku.con_methods = con_methods
-
--- add ptp eventproc methods
-util.extend_table(con_methods,ptpevp.con_methods)
--- non-con method
-chdku.ptpevp_prepare = ptpevp.ptpevp_prepare
-
--- log all ptp_txn call parameters and returns
-chdku.ptp_txn_verbose = false
--- default logging function
-chdku.ptp_txn_info_fn = util.printf
---[[
-execute an arbitrary PTP transaction, with various options
-
-[data][,param1,...param5] = con:ptp_txn(opcode[,param1...param5][,opts])
-perform a ptp transaction
-op and param1 through param5 must be convertible to number
-opts: {
-  getdata='lbuf':'string' -- perform getdata transaction, return as specified type
-  data=lbuf|string -- perform senddata transaction with specified lbuf or string
-  verbose=bool -- log parameters and returns with info_fn, default chdku.ptp_txn_verbose
-  info_fn=function, default util.printf
-}
-returns
-data if getdata is set, followed by PTP return params
-]]
-function con_methods:ptp_txn(op,...)
-	local args={...}
-	local opts
-	local ptp_params={}
-	op = tonumber(op)
-	if not op then
-		errlib.throw{etype='bad_arg',msg=('argument 1: expected opcode number, not %s'):format(type(op))}
-	end
-	for i,arg in ipairs(args) do
-		if type(arg) == 'table' then
-			if opts then
-				errlib.throw{etype='bad_arg',msg=('argument %d: unexpected table'):format(i)}
-			end
-			opts = arg
-		else
-			local narg = tonumber(arg)
-			if not narg then
-				errlib.throw{etype='bad_arg',msg=('argument %d: expected number not %s:%s'):format(i,type(arg),tostring(arg))}
-			end
-			table.insert(ptp_params,narg)
-		end
-	end
-
-	opts=util.extend_table({
-		info_fn=chdku.ptp_txn_info_fn,
-		verbose=chdku.ptp_txn_verbose,
-	},opts)
-
-	local opstr
-	if opts.verbose then
-		opstr=con:get_ptp_code_desc('OC',op)
-	else
-		opts.info_fn = chdku.nop
-	end
-	if opts.getdata and opts.data then
-		errlib.throw{etype='bad_arg',msg='getdata and data are mutually exclusive'}
-	end
-	local rvals
-	if opts.getdata then
-		if opts.getdata == 'lbuf' then
-			opts.info_fn('txn_getdata_lbuf %s %s\n',opstr,chdku.dbg_fmt_ptp_params(ptp_params))
-			rvals={self:ptp_txn_getdata_lbuf(op,table.unpack(ptp_params))}
-		elseif opts.getdata == 'string' or opts.getdata == true then
-			opts.info_fn('txn_getdata_str %s %s\n',opstr,chdku.dbg_fmt_ptp_params(ptp_params))
-			rvals={self:ptp_txn_getdata_str(op,table.unpack(ptp_params))}
-		else
-			errlib.throw{etype='bad_arg',msg=('unexpected getdata %s'):format(tostring(opts.getdata))}
-		end
-		opts.info_fn('data len=%d ret=%s\n',rvals[1]:len(),chdku.dbg_fmt_ptp_params({table.unpack(rvals,2)}))
-	elseif opts.data then
-		opts.info_fn('txn_senddata %s data len=%d %s\n',opstr,opts.data:len(), chdku.dbg_fmt_ptp_params(ptp_params))
-		rvals={self:ptp_txn_senddata(op,opts.data,table.unpack(ptp_params))}
-		opts.info_fn('ret=%s\n',chdku.dbg_fmt_ptp_params(rvals))
-	else
-		opts.info_fn('txn_nodata %s %s\n',opstr,chdku.dbg_fmt_ptp_params(ptp_params))
-		rvals={self:ptp_txn_nodata(op,table.unpack(ptp_params))}
-		opts.info_fn('ret=%s\n',chdku.dbg_fmt_ptp_params(rvals))
-	end
-	return table.unpack(rvals)
-end
-
-
 --[[
 check whether this cameras model and serial number match those given
 assumes self.ptpdev is up to date
@@ -618,8 +512,6 @@ chdku.imglist_remote_opts={
 	'imgnum_max',
 	'dirnum_min',
 	'dirnum_max',
-	'sizemin',
-	'sizemax',
 	'start_paths',
 	'fmatch',
 	'dmatch',
@@ -704,7 +596,7 @@ function con_methods:imglist(opts)
 	})
 
 	-- coerce numeric options to numbers
-	for i,name in ipairs{'lastimg','imgnum_min','imgnum_max','dirnum_min','dirnum_max','sizemin','sizemax'} do
+	for i,name in ipairs{'lastimg','imgnum_min','imgnum_max','dirnum_min','dirnum_max'} do
 		if type(ropts[name]) == 'string' then
 			ropts[name] = tonumber(ropts[name])
 		end
@@ -903,89 +795,6 @@ function con_methods:mdelete(paths,opts)
 end
 
 --[[
-download contents of file to Lua string, throw on error
-opts: {
-	nolua=boolean - do not attempt to stat. Call will fail on empty files
-	missing_ok=boolean - return nil if file can't be stat'd
-}
-]]
-function con_methods:readfile(path,opts)
-	path = fsutil.make_camera_path(path)
-	opts = opts or {}
-	if opts.missing_ok and opts.nolua then
-		errlib.throw{etype='bad_arg',msg='missing_ok requires lua'}
-	end
-	-- portocol can't download empty file, have to stat
-	-- TODO could read and return from camera lua if small
-	if not opts.nolua then
-		local st,err = self:stat(path)
-		if not st then
-			if opts.missing_ok then
-				return nil
-			end
-			errlib.throw{etype='remote',msg=err}
-		end
-		if not st.is_file then
-			errlib.throw{etype='remote',msg='not a file'..tostring(path)}
-		end
-		if st.size == 0 then
-			return ''
-		end
-	end
-	return self:download_str(path)
-end
-
---[[
-con:writefile(path,value,opts)
-upload Lua string or number to file, throw on error
-opts: {
-	nolua=boolean - do not sanity check dest
-	mkdir=boolean - create parent directories as needed, default true, disabled if nolua used
-}
-]]
-function con_methods:writefile(path,val,opts)
-	path = fsutil.make_camera_path(path)
-	opts = util.extend_table({
-		mkdir=true,
-	},opts)
-	if type(val) == 'number' then
-		val = tostring(val)
-	elseif type(val) ~= 'string' then
-		errlib.throw{etype='bad_arg',msg='expected string or number'}
-	end
-	if not opts.nolua then
-		local status, err = self:execwait(([[
-function checkpath(path,mkdir)
-	local st,err = os.stat(path)
-	if st and not st.is_file then
-		return false, 'destination not a file'
-	end
-	if mkdir then
-		local status, err=mkdir_parent(path)
-		if not status then
-			return false, err
-		end
-	else
-		st, err = os.stat(dirname(path))
-		if not st then
-			return false, 'missing dest dir'
-		end
-		if not st.is_dir then
-			return false, 'dest not a dir'
-		end
-	end
-	return true
-end
-return checkpath("%s",%s)
-]]):format(path,opts.mkdir),{libs='mkdir_parent'})
-		if not status then
-			errlib.throw{etype='remote',msg=err}
-		end
-	end
-	self:upload_str(path,val)
-end
-
---[[
 wrapper for remote functions, serialize args, combine remote and local error status
 func must be a string that evaluates to a function on the camera
 returns remote function return values on success, throws on error
@@ -1057,20 +866,17 @@ end
 
 --[[
 format a remote lua error from chdku.exec using line number information
-NOTE errors inside loadstring() etc are not correctly identified
 ]]
-function chdku.format_exec_error(execinfo,msg)
+local function format_exec_error(libs,code,msg)
 	local errmsg = msg.value
 	local lnum=tonumber(string.match(errmsg,'^%s*:(%d+):'))
 	if not lnum then
-		return string.format('format_exec_error: line num not found\n%s',errmsg)
-	end
-	if not (execinfo and execinfo.libs and execinfo.code) then
-		return string.format("format_exec_error: no execinfo\n%s\n",errmsg)
+		print('no match '..errmsg)
+		return errmsg
 	end
 	local l = 0
 	local lprev, errlib, errlnum
-	for i,lib in ipairs(execinfo.libs.list) do
+	for i,lib in ipairs(libs.list) do
 		lprev = l
 		l = l + lib.lines + 1 -- TODO we add \n after each lib when building code
 		if l >= lnum then
@@ -1103,7 +909,6 @@ opts {
 	user=handler
 	return=handler
 	error=handler
-	values=bool -- store value, unserialized if table for return and user messages
 }
 handler = table or function(msg,opts)
 throws on error
@@ -1115,49 +920,27 @@ function con_methods:read_all_msgs(opts)
 	-- if an 'all' handler is given, use it for any that don't have a specific handler
 	if opts.default then
 		for i,mtype in ipairs({'user','return','error'}) do
-			if opts[mtype] == nil then
+			if not opts[mtype] then
 				opts[mtype] = opts.default
 			end
 		end
 	end
-	local handlers = {}
-	for i,mtype in ipairs({'user','return','error'}) do
-		local h = opts[mtype]
-		local htype = type(h)
-		if htype == 'function' then
-			handlers[mtype] = h
-		elseif htype == 'table' then
-			handlers[mtype] = function(v)
-				table.insert(h,v)
-			end
-		elseif opts[mtype] then -- nil or false = ignore
-			errlib.throw{etype='bad_arg',msg='read_all_msgs: invalid handler: '..tostring(h)}
-		end
-	end
-
 	while true do
-		local msg=self:read_msg()
+		msg=self:read_msg()
 		if msg.type == 'none' then
 			break
 		end
-		local v
-		if msg.type == 'return' or msg.type == 'user' and opts.values then
-			if msg.subtype == 'table' then
-				local err
-				v,err = util.unserialize(msg.value)
-				if err then
-					errlib.throw{etype='unserialize',msg=tostring(err)}
-				end
-			else
-				v = msg.value
+		local handler = opts[msg.type]
+		if type(handler) == 'table' then
+			table.insert(handler,msg)
+		elseif type(handler) == 'function' then
+			local status, err = handler(msg,opts)
+			-- nil / no return value is NOT treated as an error
+			if status == false then
+				return false, err
 			end
-		else
-			v = msg
-		end
-		local status,err = handlers[msg.type](v,opts)
-		-- only explicit false aborts
-		if status == false then
-			return false, err
+		elseif handler then -- nil or false = ignore
+			error('invalid handler')
 		end
 	end
 	return true
@@ -1177,7 +960,7 @@ function chdku.msg_unbatcher(t)
 		if msg.subtype ~= 'table' then
 			errlib.throw{etype='wrongmsg_sub',msg='wrong message subtype: ' ..tostring(msg.subtype)}
 		end
-		local chunk,err=util.unserialize(msg.value)
+		local chunk,err=unserialize(msg.value)
 		if err then
 			errlib.throw{etype='unserialize',msg=tostring(err)}
 		end
@@ -1203,27 +986,18 @@ opts {
 	flush_cam_msgs=bool -- if true (default) read and silently discard any pending messages from previous script before running script
 					-- Prior to 1.3, ignored if clobber is true, since the running script could just spew messages indefinitely
 	flush_host_msgs=bool -- Only supported in 1.3 and later, flush any message from the host unread by previous script
-	execinfo=table -- table to receive context information for format_exec_error
-	-- below only apply if wait is set
+	-- below only apply if with wait
 	msgs={table|callback} -- table or function to receive user script messages
 	rets={table|callback} -- table or function to receive script return values, instead of returning them
 	fdata={any lua value} -- data to be passed as second argument to callbacks
-	initwait={ms|false} -- passed to first wait_status call, wait before first poll
-						-- Use to avoid polling before script has a chance to execute
+	initwait={ms|false} -- passed to wait_status, wait before first poll
 	poll={ms} -- passed to wait_status, poll interval after ramp up
 	pollstart={ms|false} -- passed to wait_status, initial poll interval, ramps up to poll
-						-- note poll rate is reset to pollstart each time a message is received
 }
 callbacks
 	f(message,fdata)
 	callbacks should throw an error to abort processing
 	return value is ignored
-
-execinfo {
-	code=string -- complete script code
-	libs=array -- rlib names
-	start_time=number -- script start time
-}
 
 returns
 	if wait is set and rets is not, returns values returned by remote code
@@ -1266,8 +1040,6 @@ function con_methods:exec(code,opts_in)
 		util.extend_table(liblist,opts.libs)
 	end
 
-	local execinfo = opts.execinfo or {}
-
 	local execflags = 0
 	-- in protocol 2.6 and later, handle kill and message flush in script exec call
 	if self:is_ver_compatible(2,6) then
@@ -1300,10 +1072,6 @@ function con_methods:exec(code,opts_in)
 	local libs = chdku.rlibs:build(liblist)
 	code = libs:code() .. code
 
-	execinfo.libs = libs
-	execinfo.code = code
-	execinfo.start_time = ticktime.get()
-
 	-- try to start the script
 	-- catch errors so we can handle compile errors
 	local status,err=self:execlua_pcall(code,execflags)
@@ -1315,7 +1083,7 @@ function con_methods:exec(code,opts_in)
 				-- add full details to message
 				-- TODO could just add to a new field and let caller deal with it
 				-- but would need lib code
-				err.msg = chdku.format_exec_error(execinfo,msg)
+				err.msg = format_exec_error(libs,code,msg)
 			end
 		end
 		--  other unspecified error, or fetching syntax/compile error message failed
@@ -1332,17 +1100,14 @@ function con_methods:exec(code,opts_in)
 	local i=1
 
 	-- process messages and wait for script to end
-	local initwait = opts.initwait
 	while true do
 		status=self:wait_status{
 			msg=true,
 			run=false,
-			initwait=initwait,
+			initwait=opts.initwait,
 			poll=opts.poll,
 			pollstart=opts.pollstart
 		}
-		-- initwait only controls the wait for the first wait after execution start
-		initwait = nil
 		if status.msg then
 			local msg=self:read_msg()
 			if msg.script_id ~= self:get_script_id() then
@@ -1363,28 +1128,24 @@ function con_methods:exec(code,opts_in)
 				else
 					-- if serialize_msgs is not selected, table return values will be strings
 					if msg.subtype == 'table' and libs.map['serialize_msgs'] then
-						results[i] = util.unserialize(msg.value)
+						results[i] = unserialize(msg.value)
 					else
 						results[i] = msg.value
 					end
 					i=i+1
 				end
 			elseif msg.type == 'error' then
-				errlib.throw{etype='exec_runtime',msg=chdku.format_exec_error(execinfo,msg)}
+				errlib.throw{etype='exec_runtime',msg=format_exec_error(libs,code,msg)}
 			else
 				errlib.throw({etype='wrongmsg',msg='unexpected msg type: '..tostring(msg.type)})
 			end
-		end
-		-- script is completed
-		if status.run == false then
-			-- all messages have been processed, done
-			if status.msg == false then
-				-- returns were handled by callback or table
-				if opts.rets then
-					return
-				else
-					return unpack(results,1,table.maxn(results)) -- maxn expression preserves nils
-				end
+		-- script is completed and all messages have been processed
+		elseif status.run == false then
+			-- returns were handled by callback or table
+			if opts.rets then
+				return
+			else
+				return unpack(results,1,table.maxn(results)) -- maxn expression preserves nils
 			end
 		end
 	end
@@ -1464,7 +1225,7 @@ chdku.remotecap_dtypes={
 		id=4,
 		max_chunks=1,
 	},
-	{
+	{ 
 		ext='cr2', -- canon raw
 		id=8,
 		max_chunks=100,
@@ -1482,10 +1243,13 @@ function chdku.rc_handler_store(store)
 		store_fn = function(val)
 			table.insert(store,val)
 		end
-	else
+	elseif type(store) ~= 'nil' then
 		errlib.throw{etype='bad_arg',msg='rc_handler_store: invalid store target'}
 	end
 	return function(lcon,hdata)
+		if not store then
+			store_fn = hdata.store_return
+		end
 		local chunk
 		local n_chunks = 0
 		repeat
@@ -1688,7 +1452,7 @@ function chdku.rc_handler_file(hopts)
 			error(err)
 		end
 		if n_chunks > hdata.max_chunks then
-			errlib.throw{etype='protocol',msg='rc_handler_file: exceeded max_chunks'}
+			errlib.throw{etype='protocol',msg='rc_handler_store: exceeded max_chunks'}
 		end
 	end
 end
@@ -1751,26 +1515,14 @@ end
 --
 --[[
 fetch remote capture data
-results=con:capture_get_data(opts)
+rets,errmsg=con:capture_get_data(opts)
 opts:
 	timeout, initwait, poll, pollstart -- passed to wait_status
-									-- note wait_status is called for each
-									-- chunk and script message
 	jpg=handler,
 	raw=handler,
 	dng_hdr=handler,
 	craw=handler,
-	msg_handlers=table -- table of handlers for con:read_all_msgs
-					-- default: user and return messages are unserialized and stored in results
-					-- errors are re-thrown, aborting capture_get_data
-	wait_script=bool -- wait for script to end, consuming messages
-					-- note if wait_script is false, which messages are collected depends
-					-- on the timing of the data transfer relative to the script
-					-- default: False
-	wait_script_timeout,wait_script_poll -- passed to wait_status for script end wait
-	execinfo=table -- execinfo from con:exec, to allow formatting script error messages
-
-handler: - capture data chunk handlers
+handler:
 	f(lcon,handler_data)
 	handlers should throw with error() on error, return values are ignored
 handler_data:
@@ -1778,25 +1530,17 @@ handler_data:
 	id  -- data type number
 	opts -- options passed to capture_get_data
 	imgnum -- image number
-results:
-	msgs_return=table|nil - script messages, if function handler not specified
-	msgs_user=table|nil - script return messages,  if function handler not specified
-
+	store_return() -- a function that can be used to store values for the return value of capture_get_data
+rets
+	true or array of store_return[bitnum][value] values on success
 	throws on error
 ]]
 function con_methods:capture_get_data(opts)
 	opts=util.extend_table({
 		timeout=20000,
 		shotseq=1,
-		wait_script=false,
-		wait_script_timeout=10000,
-		wait_script_poll=100,
 	},opts)
-	local wait_opts=util.extend_table({
-		rsdata=true,
-		timeout_error=true,
-		msg=true,
-	},opts,{keys={'timeout','initwait','poll','pollstart'}})
+	local wait_opts=util.extend_table({rsdata=true,timeout_error=true},opts,{keys={'timeout','initwait','poll','pollstart'}})
 
 	local toget = {}
 	local handlers = {}
@@ -1826,94 +1570,61 @@ function con_methods:capture_get_data(opts)
 
 	local subst
 
-	local results = { }
-
-	if not opts.msg_handlers then
-		opts.msg_handlers = { }
-	end
-	-- don't use extend_table to ensure original opts table is used and passed handlers
-	for i,mtype in ipairs{'user','return'} do
-		if opts.msg_handlers[mtype] == nil then
-			opts.msg_handlers[mtype] = {}
-		end
-		if type(opts.msg_handlers[mtype]) == 'table' then
-			results['msgs_'..mtype] = opts.msg_handlers[mtype]
-		end
-	end
-	if opts.msg_handlers.error == nil then
-		opts.msg_handlers.error = function(msg)
-			errlib.throw{etype='exec_'..msg.subtype,msg=chdku.format_exec_error(opts.execinfo,msg)}
-		end
-	end
+	-- table to return chunks (or other values) sent by hdata.store_return
+	local rets = {}
 
 	local done
-	local status
 	while not done do
-		-- note a script spamming messages could avoid timeout
-		status = self:wait_status(wait_opts)
+		local status = con:wait_status(wait_opts)
 		if status.rsdata == 0x10000000 then
 			error('remote shoot error')
 		end
-		if status.rsdata then
-			-- initialize subst state when first data available, ~shot time
-			if opts.do_subst and not subst then
-				subst=varsubst.new(chdku.rc_subst_funcs)
-				self:set_subst_con_state(subst.state)
-				chdku.set_subst_time_state(subst.state)
-				-- each capture_get_data only handles one shot, so caller is responsible for incrementing
-				subst.state.shotseq = opts.shotseq
-			end
+		-- initialize subst state when first data available, ~shot time
+		if opts.do_subst and not subst then
+			subst=varsubst.new(chdku.rc_subst_funcs)
+			self:set_subst_con_state(subst.state)
+			chdku.set_subst_time_state(subst.state)
+			-- each capture_get_data only handles one shot, so caller is responsible for incrmenting
+			subst.state.shotseq = opts.shotseq
+		end
 
-			local avail = util.bit_unpack(status.rsdata)
-			local n_toget = 0
-			for i=0,3 do
-				if avail[i] == 1 then
-					if not toget[i] then
-						error(string.format('unexpected type %d',i))
-					end
-					local hdata = util.extend_table({
-						subst=subst,
-						opts=opts,
-						imgnum=status.rsimgnum,
-					},chdku.remotecap_dtypes[i])
+		local avail = util.bit_unpack(status.rsdata)
+		local n_toget = 0
+		for i=0,3 do
+			if avail[i] == 1 then
+				if not toget[i] then
+					-- TODO could have a nop handler
+					error(string.format('unexpected type %d',i))
+				end
+				local hdata = util.extend_table({
+					subst=subst,
+					opts=opts,
+					imgnum=status.rsimgnum,
+					store_return=function(val)
+						if rets[i] then
+							table.insert(rets,val)
+						else
+							rets[i] = {val}
+						end
+					end,
+				},chdku.remotecap_dtypes[i])
 
-					handlers[i](self,hdata)
-					toget[i] = nil
-				end
-				if toget[i] then
-					n_toget = n_toget + 1
-				end
+				handlers[i](self,hdata)
+				toget[i] = nil
 			end
-			if n_toget == 0 then
-				done = true
+			if toget[i] then
+				n_toget = n_toget + 1
 			end
 		end
-		if status.msg then
-			self:read_all_msgs(opts.msg_handlers)
+		if n_toget == 0 then
+			done = true
 		end
 	end
-	if opts.wait_script and status.run then
-		while status.run do
-			-- note a script spamming messages could avoid timeout
-			status = self:wait_status{
-				run = false,
-				msg = true,
-				timeout = opts.wait_script_timeout,
-				timeout_error = true,
-				poll = opts.wait_script_poll,
-			}
-			if status.msg then
-				self:read_all_msgs(opts.msg_handlers)
-			end
-		end
-	else
-		-- process any remaining messages, since read in main loop happens
-		-- after potentially long transfer without re-checking status
-		self:read_all_msgs(opts.msg_handlers)
+	if #rets > 0 then
+		return rets
 	end
-	return results
+	return true
 end
-
 --[[
 sleep until specified status is matched
 status=con:wait_status(opts)
@@ -2012,102 +1723,19 @@ function con_methods:wait_status(opts)
 end
 
 --[[
-return array of chdkptp PTP code extension IDs applicable to current connection
+set condev, ptpdev apiver for current connection
+throws on error
+if CHDK extension not present, apiver is set to -1,-1 but no error is thrown
 ]]
-function con_methods:get_ptp_ext_code_ids()
-	local r={}
-	-- check for matching manufacturer first
-	for k,v in pairs(ptp.groups) do
-		-- USB vendor ID. Not present for PTP/IP
-		if self.condev and self.condev.vendor_id and self.condev.vendor_id == v.usb_vendor_id then
-			table.insert(r,k)
-			break
-		end
-		if self.ptpdev and self.ptpdev.manufacturer and self.ptpdev.manufacturer == v.vendor_str then
-			table.insert(r,k)
-			break
-		end
-	end
-	-- MTP device may use 6 or 0xFFFFFFFF as extension ID. don't add MTP_EXT
-	-- because clashes with other IDs.
-	-- According to MTP spec, extensions to MTP should theoretically be
-	-- identified in VendorExtensionDesc, but in practice Canon does not
-	if self.ptpdev and (self.ptpdev.VendorExtensionID == 6 or self.ptpdev.VendorExtensionID == 0xffffffff) then
-		table.insert(r, 'MTP')
-	end
-	return r
-end
-
---[[
-return string name and extension ID for code in extensions supported by current connection
-codetype is one of 'OC', 'EC', 'OFC', 'DPC' or 'RC'
-code is numeric code ID
-returns name, group id if found, otherwise false
-]]
-function con_methods:get_ptp_code_info(codetype,code)
-	return ptp.get_code_info(codetype,code,self.ptp_code_ids)
-end
-
---[[
-return formatted string describing code
-]]
-function con_methods:get_ptp_code_desc(codetype,code)
-	return ptp.fmt_code_desc(code,self:get_ptp_code_info(codetype,code))
-end
-
---[[
-build a map of supported operations etc
-]]
-function con_methods:get_ptp_supported_codes()
-	local r={}
-	for _,cdesc in ipairs(ptp.devinfo_code_map) do
-		local k = cdesc.cid
-		-- There are two lists of object format codes, for image and capture
-		if k == 'OFC' and cdesc.devid == 'CaptureFormats' then
-			k = 'OFC_cap'
-		end
-		r[k] = util.flag_table(self.ptpdev[cdesc.devid])
-	end
-	return r
-end
-
---[[
-update USB and PTP devinfo, along with stuff derived from PTP devinfo
-]]
-function con_methods:update_devinfo(opts)
-	opts = opts or {}
+function con_methods:update_connection_info()
 	-- this currently can't fail, devinfo is always stored in connection object
 	self.condev=self:get_con_devinfo()
-	self.ptpdev=self:get_ptp_devinfo(opts.refresh_ptp)
-	-- list PTP constant groups from ptpcodes modules which apply to this connection
-	self.ptp_code_ids = {'STD',table.unpack(self:get_ptp_ext_code_ids())}
-	self.ptp_support = self:get_ptp_supported_codes()
-end
-
---[[
-set condev, ptpdev, and apiver for current connection
-throws on error
-if CHDK extension not present or not checked, apiver is set to -1,-1 but no error is thrown
-opts{
-	chdk_check=bool|'force' -- get CHDK API version, default true
-							-- false=don't check, true=check if opcode supported, 'force' check always
-							-- not checking saves up to ~10ms depending on cam
-	refresh_ptp=bool -- refresh ptp devinfo from device
-}
-]]
-function con_methods:update_connection_info(opts)
-	opts = util.extend_table({chdk_check=true},opts)
-	self:update_devinfo(opts)
-	if not opts.chdk_check or (opts.chdk_check ~= 'force' and not self.ptp_support.OC[ptp.CANON.OC.CHDK]) then
-		-- NOTE this makes not checked equivalent to not supported
-		self.apiver={MAJOR=-1,MINOR=-1}
-		return
-	end
+	self.ptpdev=self:get_ptp_devinfo()
 	local status,major,minor=self:camera_api_version_pcall()
 	if not status then
 		local err = major
 		-- device connected doesn't support PTP_OC_CHDK
-		if err.ptp_rc == ptp.RC.OperationNotSupported then
+		if err.ptp_rc == ptp.RC_OperationNotSupported then
 			self.apiver={MAJOR=-1,MINOR=-1}
 			return
 		end
@@ -2115,46 +1743,19 @@ function con_methods:update_connection_info(opts)
 	end
 	self.apiver={MAJOR=major,MINOR=minor}
 end
-
---[[
-handle prefs that affect behavior on connect
-NOTE: NOT currently called in con:connect(), intended only for primary
-CLI/GUI connections, not temp connections associated with list or
-device matching
-]]
-function con_methods:do_on_connect_actions()
-	-- should Canon firmware PTP mode be enabled?
-	local ptp_mode_set
-	if prefs.cam_connect_set_ptp_mode == 'always'
-			or (prefs.cam_connect_set_ptp_mode == self.condev.transport) then
-		-- Both getting object handles and querying MTP property support
-		-- put the camera in PTP mode. Prefer MTP when available (most DryOS cams)
-		-- as there can potentially be thousands of handles
-		if self.ptp_support.OC[ptp.MTP.OC.GetObjectPropsSupported] and #con.ptpdev.ImageFormats then
-			self:ptp_txn(ptp.MTP.OC.GetObjectPropsSupported,con.ptpdev.ImageFormats[1],{getdata='string'})
-		else
-			self:ptp_get_object_handles()
-		end
-		ptp_mode_set = true
-	end
-	if prefs.cam_connect_unlock_ui == 'always'
-			or (prefs.cam_connect_unlock_ui == 'ptpset' and ptp_mode_set) then
-		-- need to wait for transition to complete if locked
-		-- TODO should expose cameracon_state in camera side lua, wait
-		if ptp_mode_set then
-			sys.sleep(250)
-		end
-		self:execwait('ptp_ui_unlock()',{libs='ptp_ui_unlock'})
-	end
-end
-
 --[[
 override low level connect to gather some useful information that shouldn't change over life of connection
-opts - passed to con_methods:update_connection_info
+opts{
+	raw:bool -- just call the low level connect (saves ~40ms)
+}
 ]]
 function con_methods:connect(opts)
+	opts = util.extend_table({},opts)
 	chdk_connection.connect(self._con)
-	self:update_connection_info(opts)
+	if opts.raw then
+		return
+	end
+	self:update_connection_info()
 end
 
 --[[
@@ -2191,6 +1792,282 @@ function con_methods:reconnect(opts)
 end
 
 --[[
+arrays describing live protocol fields for wrappers
+all assumed to be 32 bit signed ints for the moment, so index - 1 * 4 = offset
+_map maps name to offset
+v21 for compatibility with previous version
+]]
+chdku.live_fields_v21={
+	'version_major',
+	'version_minor',
+	'lcd_aspect_ratio',
+	'palette_type',
+	'palette_data_start',
+	'vp_desc_start',
+	'bm_desc_start',
+}
+
+chdku.live_fields={
+	'version_major',
+	'version_minor',
+	'lcd_aspect_ratio',
+	'palette_type',
+	'palette_data_start',
+	'vp_desc_start',
+	'bm_desc_start',
+	'bmo_desc_start',
+}
+
+chdku.live_fb_desc_fields={
+	'fb_type',
+	'data_start',
+	'buffer_width',
+
+	'visible_width',
+	'visible_height',
+
+	'margin_left',
+	'margin_top',
+	'margin_right',
+	'margin_bot',
+}
+
+chdku.live_fb_names_v21={
+	'vp',
+	'bm',
+}
+
+chdku.live_fb_names={
+	'vp',
+	'bm',
+	'bmo',
+}
+
+chdku.live_frame_map={}
+chdku.live_frame_map_v21={}
+chdku.live_fb_desc_map={}
+
+--[[
+init name->offset mapping
+]]
+local function live_init_maps()
+	for i,name in ipairs(chdku.live_fields) do
+		chdku.live_frame_map[name] = (i-1)*4
+	end
+	for i,name in ipairs(chdku.live_fields_v21) do
+		chdku.live_frame_map_v21[name] = (i-1)*4
+	end
+	for i,name in ipairs(chdku.live_fb_desc_fields) do
+		chdku.live_fb_desc_map[name] = (i-1)*4
+	end
+end
+live_init_maps()
+
+local live_wrapper_meta={
+	__index=function(t,key)
+		-- rawget because frame may be nil, would recursively call index method
+		local frame = rawget(t,'_frame')
+		if not frame then
+			return nil
+		end
+		local off = t._field_map[key]
+		if off then
+			return frame:get_i32(off)
+		end
+	end
+}
+local live_wrapper_methods={
+	clear_frame=function(self)
+		self._frame = nil
+		self._field_names = nil
+		self._field_map = nil
+		self._fb_field_names = nil
+		self._fb_field_map = nil
+		self._fb_names = nil
+		for i,fb in ipairs(chdku.live_fb_names) do
+			self[fb] = nil
+		end
+	end,
+	set_frame=function(self,frame)
+		-- no frame, reset to uninitialized
+		if not frame then
+			self:clear_frame()
+			return
+		end
+		local new_major = frame:get_i32(0)
+		local new_minor = frame:get_i32(4)
+		if new_major < 2 then
+			self:clear_frame()
+			errlib.throw{
+				etype='badversion',
+				msg=string.format('incompatible live vew protocol %s.%s',tostring(new_major),tostring(new_minor))
+			}
+		end
+
+		-- check for version change, if not just replace frame data
+		if self.version_major == new_major and self.version_minor == new_minor then
+			self._frame = frame
+			return
+		end
+		-- if changing version make sure all old values/wrappers cleared
+		self:clear_frame()
+		self._frame = frame
+
+		if new_major == 2 and new_minor < 2 then
+			self._field_names = chdku.live_fields_v21
+			self._field_map = chdku.live_frame_map_v21
+			self._fb_names= chdku.live_fb_names_v21
+		else
+			self._field_names = chdku.live_fields
+			self._field_map = chdku.live_frame_map
+			self._fb_names = chdku.live_fb_names
+		end
+
+		-- fb desc fields don't currently vary by version
+		self._fb_field_names = chdku.live_fb_desc_fields
+		self._fb_field_map = chdku.live_fb_desc_map
+
+		for i,fb in ipairs(self._fb_names) do
+			if self[fb..'_desc_start'] ~= 0 then
+				self[fb] = chdku.live_fb_desc_wrap(self,fb)
+			end
+		end
+	end,
+}
+
+local live_fb_desc_meta={
+	__index=function(t,key)
+		local frame = t._lv._frame
+		local off = t._lv._fb_field_map[key]
+		if frame and off then
+			return frame:get_i32(t:offset()+off)
+		end
+	end
+}
+
+local live_fb_desc_methods={
+	get_screen_width = function(self)
+		return self.margin_left + self.visible_width + self.margin_right;
+	end,
+	get_screen_height = function(self)
+		return self.margin_top + self.visible_height + self.margin_bot;
+	end,
+	offset = function(self)
+		return self._lv[self._offset_name]
+	end,
+}
+function chdku.live_fb_desc_wrap(lv,fb_pfx)
+	local t=util.extend_table({
+		_offset_name = fb_pfx .. '_desc_start',
+		_lv = lv,
+	},live_fb_desc_methods);
+	setmetatable(t,live_fb_desc_meta)
+	return t
+end
+
+--[[
+create a new live view data wrapper
+]]
+function chdku.live_wrapper()
+	local t=util.extend_table({},live_wrapper_methods)
+	setmetatable(t,live_wrapper_meta)
+	return t
+end
+
+
+--[[
+helper functions for live image dump
+open file or pipe for pbm / pam dump
+opts are from chdku.live_dump_*
+TODO this isn't really live dump specific
+]]
+local function live_dump_img_open(opts)
+	if opts.filehandle then
+		return opts.filehandle
+	end
+	if not opts.filename then
+		error('no filename or filehandle')
+	end
+
+	local fh
+	if opts.pipe then
+		fh = fsutil.popen_e(opts.filename,'wb')
+		if opts.pipe_oneproc then
+			opts.filehandle = fh
+		end
+	else
+		-- ensure parent dir exists
+		fsutil.mkdir_parent(opts.filename)
+		fh = fsutil.open_e(opts.filename,'wb')
+	end
+	return fh
+end
+local function live_dump_img_close(fh,opts)
+	-- open was passed a handle, don't mess with it
+	if opts.filehandle then
+		return
+	end
+	fh:close()
+end
+
+--[[
+write viewport data to an unscaled pbm image
+frame: live view frame
+opts:{
+	filename=string -- filename or pipe command
+	pipe=bool -- filename is a command to pipe to
+	pipe_oneproc=bool -- start pipe process once and use for all subsequent writes,
+						caller must close opts.filehandle when done
+	filehandle=handle -- already open handle to write to, filename ignored
+	lb=lbuf -- lbuf for image to re-use, created and set if not given
+	pimg=pimg -- pimg to re-use, created if and set if not given
+	skip=bool -- downsample image width 50% in X (faster, rough aspect correction for some cams)
+}
+]]
+function chdku.live_dump_vp_pbm(frame,opts)
+	opts.pimg = liveimg.get_viewport_pimg(opts.pimg,frame,opts.skip)
+	-- TODO may be null if video selected on startup
+	if not opts.pimg then
+		error('no viewport data')
+	end
+	opts.lb = opts.pimg:to_lbuf_packed_rgb(opts.lb)
+	local width = opts.pimg:width()
+	if opts.skip then
+		width = width/2
+	end
+
+	local fh = live_dump_img_open(opts)
+	fh:write(string.format('P6\n%d\n%d\n%d\n',
+		width,
+		opts.pimg:height(),255))
+	opts.lb:fwrite(fh)
+	live_dump_img_close(fh,opts)
+end
+--[[
+write viewport data to an unscaled RGBA pam image
+opts as above
+]]
+function chdku.live_dump_bm_pam(frame,opts)
+	opts.pimg = liveimg.get_bitmap_pimg(opts.pimg,frame,opts.skip)
+	opts.lb = opts.pimg:to_lbuf_packed_rgba(opts.lb)
+
+	local width = opts.pimg:width()
+	if opts.skip then
+		width = width/2
+	end
+
+	local fh = live_dump_img_open(opts)
+
+	fh:write(string.format(
+		'P7\nWIDTH %d\nHEIGHT %d\nDEPTH %d\nMAXVAL %d\nTUPLTYPE RGB_ALPHA\nENDHDR\n',
+		width,
+		opts.pimg:height(),
+		4,255))
+	opts.lb:fwrite(fh)
+	live_dump_img_close(fh,opts)
+end
+
+--[[
 NOTE this only tells if the CHDK protocol supports live view
 the live sub-protocol might not be fully compatible
 ]]
@@ -2198,35 +2075,67 @@ function con_methods:live_is_api_compatible()
 	return self:is_ver_compatible(2,3)
 end
 
---[[
-get a new frame specified by 'what' to con.live._frame
-throws on error
---]]
 function con_methods:live_get_frame(what)
 	self.live:set_frame(self:get_live_data(self.live._frame,what))
+	return true
 end
 
---[[
-start dump to filename, default pid+date used if not set
-throws on error
-]]
 function con_methods:live_dump_start(filename)
 	if not self:is_connected() then
-		errlib.throw{etype='not_connected',msg='not connected'}
+		return false,'not connected'
 	end
 	if not self:live_is_api_compatible() then
-		errlib.throw{etype='protocol',msg='api not compatible'}
+		return false,'api not compatible'
 	end
-	self.live:dump_start(filename)
+	if not filename then
+		filename = string.format('chdk_%x_%s.lvdump',tostring(con.condev.product_id),os.date('%Y%m%d_%H%M%S'))
+	end
+	--printf('recording to %s\n',dumpname)
+	self.live.dump_fh = io.open(filename,"wb")
+	if not self.live.dump_fh then
+		return false, 'failed to open dumpfile'
+	end
+
+	-- used to write the size field of each frame
+	self.live.dump_sz_buf = lbuf.new(4)
+
+	-- header (magic, size of following data, version major, version minor)
+	-- TODO this is ugly
+	self.live.dump_fh:write('chlv') -- magic
+	self.live.dump_sz_buf:set_u32(0,8) -- header size (version major, minor)
+	self.live.dump_sz_buf:fwrite(self.live.dump_fh)
+	self.live.dump_sz_buf:set_u32(0,1) -- version major
+	self.live.dump_sz_buf:fwrite(self.live.dump_fh)
+	self.live.dump_sz_buf:set_u32(0,0) -- version minor
+	self.live.dump_sz_buf:fwrite(self.live.dump_fh)
+
+	self.live.dump_size = 16;
+
+	self.live.dump_fn = filename
+	return true
 end
 
 function con_methods:live_dump_frame()
-	self.live:dump_frame()
+	if not self.live.dump_fh then
+		return false,'not initialized'
+	end
+	if not self.live._frame then
+		return false,'no frame'
+	end
+
+	self.live.dump_sz_buf:set_u32(0,self.live._frame:len())
+	self.live.dump_sz_buf:fwrite(self.live.dump_fh)
+	self.live._frame:fwrite(self.live.dump_fh)
+	self.live.dump_size = self.live.dump_size + self.live._frame:len() + 4
+	return true
 end
 
 -- TODO should ensure this is automatically called when connection is closed, or re-connected
 function con_methods:live_dump_end()
-	self.live:dump_end()
+	if self.live.dump_fh then
+		self.live.dump_fh:close()
+		self.live.dump_fh=nil
+	end
 end
 
 --[[
@@ -2266,13 +2175,6 @@ local con_pcall_methods={
 	'execwait',
 	'wait_status',
 	'capture_get_data',
-	'live_get_frame',
-	'live_dump_start',
-	'live_dump_frame',
-	'ptp_txn',
-	'ptpevp_initiate',
-	'ptpevp_call',
-	'ptpevp_terminate',
 }
 local function init_pcall_wrappers()
 	for i,name in ipairs(con_pcall_methods) do
@@ -2291,7 +2193,6 @@ init_pcall_wrappers()
 chdku.apiver = chdk.host_api_version()
 -- host progam version
 chdku.ver = chdk.program_version()
-chdku.ver.FULL_STR =('%d.%d.%d'):format(chdku.ver.MAJOR,chdku.ver.MINOR,chdku.ver.BUILD)
 
 --[[
 bool = chdku.match_device(devinfo,match)
@@ -2300,26 +2201,21 @@ attempt to find a device specified by the match table
 	bus='bus pattern'
 	dev='device pattern'
 	product_id = number
-	vendor_id = number
 	plain = bool -- plain text match
 }
 empty / false dev or bus matches any
 ]]
 function chdku.match_device(devinfo,match)
 --[[
-	printf('try bus:%s (%s) dev:%s (%s) pid:%s (%s) vid:%s (%s)\n',
+	printf('try bus:%s (%s) dev:%s (%s) pid:%s (%s)\n',
 		devinfo.bus, tostring(match.bus),
 		devinfo.dev, tostring(match.dev),
-		devinfo.product_id, tostring(match.product_id),
-		devinfo.vendor_id, tostring(match.vendor_id))
+		devinfo.product_id, tostring(match.product_id))
 --]]
 	if match.bus and not string.find(devinfo.bus,match.bus,1,match.plain) then
 		return false
 	end
 	if match.dev and not string.find(devinfo.dev,match.dev,1,match.plain) then
-		return false
-	end
-	if match.vendor_id and tonumber(match.vendor_id) ~= devinfo.vendor_id then
 		return false
 	end
 	return (match.product_id == nil or tonumber(match.product_id)==devinfo.product_id)
@@ -2338,7 +2234,7 @@ function chdku.connection(devspec)
 	local con = {}
 	setmetatable(con,con_meta)
 	con._con = chdk.connection(devspec)
-	con.live = lvutil.live_wrapper()
+	con.live = chdku.live_wrapper()
 	return con
 end
 

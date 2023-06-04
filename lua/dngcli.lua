@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2021 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2014 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,12 +11,12 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 --]]
 --[[
 CLI commands for manipulating DNG images
 ]]
-local argparser = require'argparser'
 -- store info for DNG cli commands, global for easy script access
 local m = {
 	--selected = current selected dng, or nil
@@ -248,7 +248,7 @@ local function dngbatch_callback(self,opts)
 	batch = {}
 end
 
-local dngbatch_ap=argparser.create{
+local dngbatch_ap=cli.argparser.create{
 	patch=false,
 	fmatch=false,
 	rmatch=false,
@@ -332,7 +332,7 @@ m.init_cli = function()
 		names={'dngload'},
 		help='load a dng file',
 		arghelp="[options] <file>",
-		args=argparser.create({
+		args=cli.argparser.create({
 			nosel=false,
 		}),
 		-- TODO options to reload or select/ignore if same file already loaded
@@ -362,7 +362,7 @@ m.init_cli = function()
 		names={'dngsave'},
 		help='save a dng file',
 		arghelp="[options] [image num] [file]",
-		args=argparser.create({
+		args=cli.argparser.create({
 			over=false,
 			keepmtime=false,
 		}),
@@ -420,7 +420,7 @@ m.init_cli = function()
 		names={'dngunload'},
 		help='unload dng file',
 		arghelp="[image num]",
-		args=argparser.create({}),
+		args=cli.argparser.create({}),
 		func=function(self,args)
 			if #args > 0 then
 				narg = table.remove(args,1)
@@ -438,11 +438,11 @@ m.init_cli = function()
 		end,
 	},
 	{
-		-- TODO file output, ifd values, individual ifd values
+		-- TODO file output, histogram, ifd values, individual ifd values
 		names={'dnginfo'},
 		help='display information about a dng',
 		arghelp="[options] [image num]",
-		args=argparser.create({
+		args=cli.argparser.create({
 			s=false,
 			ifd=false,
 			h=false,
@@ -516,7 +516,7 @@ m.init_cli = function()
 		names={'dnghist'},
 		help='generate a histogram',
 		arghelp="[options] [image num]",
-		args=argparser.create({
+		args=cli.argparser.create({
 			min=false,
 			max=false,
 --			out=false,
@@ -540,17 +540,8 @@ m.init_cli = function()
     region of image to search, either active area (default) or all
   -bin=<n>
     number of values in histogram bin
-  -fmt=<count|%[format]>
-    count displays bin counts directly
-    % displays percentages, modified by [format] optionally consisting of
-     'r' percent is of range specified by min/max, instead of total
-     '.' or '#' plot percent with repetitions of the . or # character
-     [width] maximum number of characters, default 100
-     '!' scale largest bin to [width]
-    examples
-     -fmt=%      numeric percentage of histogram total
-     -fmt=%r     numeric percentage of range specified by min/max
-     -fmt=%#120! lines of '#' with 120 repetitions for the largest bin
+  -fmt=<count|%|%.>
+    format for output
 ]],
 		func=function(self,args)
 			local d = m.get_sel_batch(args[1])
@@ -587,7 +578,8 @@ m.init_cli = function()
 
 			local h = d:build_histogram({top=top,left=left,bottom=bottom,right=right})
 			local binsize = tonumber(args.bin)
-			h:print({
+			local histoutil=require'histoutil'
+			histoutil.print(h,{
 				min=vmin,
 				max=vmax,
 				fmt=args.fmt,
@@ -601,7 +593,7 @@ m.init_cli = function()
 		names={'dnglistpixels'},
 		help='generate a list of pixel coordinates',
 		arghelp="[options] [image num]",
-		args=argparser.create({
+		args=cli.argparser.create({
 			min=false,
 			max=false,
 			out=false,
@@ -729,7 +721,7 @@ m.init_cli = function()
 		names={'dngsel'},
 		help='select dng',
 		arghelp="<number>",
-		args=argparser.create({
+		args=cli.argparser.create({
 			ifds=false,
 		}),
 		help_detail=[[
@@ -749,7 +741,7 @@ m.init_cli = function()
 		names={'dngmod'},
 		help='modify dng',
 		arghelp="[options] [files]",
-		args=argparser.create({
+		args=cli.argparser.create({
 			patch=false,
 			over=false,
 		}),
@@ -780,7 +772,7 @@ m.init_cli = function()
 		help='extract data from dng',
 		arghelp="[options] [image num]",
 		-- TODO scale options
-		args=argparser.create({
+		args=cli.argparser.create({
 			thm=false,
 			raw=false,
 			rfmt=false,
@@ -823,7 +815,7 @@ m.init_cli = function()
 		names={'dngbatch'},
 		help='manipulate multiple files',
 		arghelp="[options] [files] { command ; command ... }",
-		args=argparser.nop,
+		args=cli.argparser.nop,
 		-- TODO should allow filename substitutions for commands, e.g. dump -raw=$whatever
 		help_detail=[[
  options:

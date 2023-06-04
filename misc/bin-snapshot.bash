@@ -1,5 +1,5 @@
 #!/bin/bash
-# build a snapshot zip
+# build a snapshot zip 
 name=`basename "$0"`
 
 function error_exit {
@@ -69,7 +69,7 @@ if [ "$OSTYPE" = "Msys" ] ; then
 	fi
 	# GUI is assumed to be included in default build on windows
 	gui=""
-else
+else 
 	OS=`uname -s`
 	EXE=""
 fi
@@ -77,7 +77,7 @@ OSARCH="$OS-$ARCH"
 
 if [ -z "$libsfile" ] ; then
 	if [ "$OS" = "Linux" -a ! -z "$gui" ] ; then
-		libsfile="linux-lua53"
+		libsfile="linux-lua52"
 	else
 		libsfile="none"
 	fi
@@ -133,8 +133,8 @@ mkdir -p "$stagedir"
 mkdir -p "$stagedir"/lua/extras
 
 cp $PROGS \
-	README.TXT USAGE.TXT COPYING THANKS.TXT INSTALL.TXT \
-	README-LINUX-BINARIES.TXT README-MACOS.TXT \
+	README.TXT USAGE.TXT COPYING THANKS.TXT \
+	README-LINUX-BINARIES.TXT README-OSX.TXT \
 	"$stagedir"
 
 cp lua/*.lua "$stagedir"/lua

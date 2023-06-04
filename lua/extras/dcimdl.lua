@@ -1,7 +1,7 @@
 --[[
 example of downloading and deleting form DCIM directory
 ]]
-function dcimdl(destdir,del,pretend)
+function dcimdl(destdir,del,pretend) 
 	if pretend then
 		pretend = '-pretend '
 	else

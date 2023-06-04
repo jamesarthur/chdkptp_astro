@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2021 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2019 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,7 +11,8 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 ]]
 --[[
 module for gui timer/scheduler
@@ -38,7 +39,7 @@ function m.run_after(time,fn,data)
 	m.ensure_timer_running()
 end
 function m.run_repeat(time,fn,data)
-	local t = {
+	t = {
 		last=ticktime.get(),
 		time=time,
 		fn=fn,
@@ -83,26 +84,15 @@ end)
 function m.init_timer(time)
 	if not time then
 		time = 50
-	end
-	m.time = time
+	end 
 	if m.timer then
 		iup.Destroy(m.timer)
 	end
-	m.timer = iup.timer{
+	m.timer = iup.timer{ 
 		time = tostring(time),
 		action_cb = m.tick,
 		run = "NO", -- first scheduled action will start
 		-- note for some reason, creating with YES fails occasionally, setting after seems OK
 	}
-	m.is_init = true
 end
-
-function m.is_initialized()
-	return m.is_init
-end
-
-function m.min_interval()
-	return m.time
-end
-
 return m

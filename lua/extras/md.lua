@@ -37,9 +37,9 @@ m.md_defaults={
 		-- h is return value
 		mask_type=0, -- i: masking type  0=no regions, 1=include, 2=exclude
 		mask_c1=0, -- j: mask first column
-		mask_r1=0, -- k: mask first row
+		mask_r1=0, -- k: mask first row 
 		mask_c2=0, -- l: mask last column (in this module, negative values count from the left, so -1 = cols - 1)
-		mask_r2=0, -- m: mask last row
+		mask_r2=0, -- m: mask last row 
 		flags=0, -- n: flags bit 1 = immediate shoot, bit 2 = debug log, bit 4 = dump liveview, bit 8 = don't release shoot_full
 		step=6, -- o: pixel step
 		start_delay=0, -- p: start delay

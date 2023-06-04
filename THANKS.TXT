@@ -4,24 +4,17 @@ Acknowledgement and copyright information is given below.
 ptpcam http://libptp.sourceforge.net/
 ptpcam is distributed under the GPL, as described in COPYING
 
-libgphoto2 http://www.gphoto.org/proj/libgphoto2/
-Copyright (C) 2001 Mariusz Woloszyn <emsi@ipartners.pl>
-Copyright (C) 2003-2020 Marcus Meissner <marcus@jet.franken.de>
-Copyright (C) 2006-2008 Linus Walleij <triad@df.lth.se>
-libgphoto2 is licensed under the LGPL
-https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html
-
-Lua http://www.lua.org/
-Copyright (c) 1994-2020 Lua.org, PUC-Rio.
+Lua http://www.lua.org/ 
+Copyright (c) 1994-2017 Lua.org, PUC-Rio.
 
 IUP http://www.tecgraf.puc-rio.br/iup/
-Copyright (c) 1994-2020 Tecgraf, PUC-Rio.
+Copyright (c) 1994-2019 Tecgraf, PUC-Rio.
 
 CD http://www.tecgraf.puc-rio.br/cd/
-Copyright (c) 1994-2020 Tecgraf, PUC-Rio.
+Copyright (c) 1994-2019 Tecgraf, PUC-Rio.
 
 LuaFileSystem http://keplerproject.github.io/luafilesystem/
-Copyright (c) 2003-2020 Kepler Project.
+Copyright (c) 2003-2017 Kepler Project.
 
 Lua-Signal https://github.com/LuaDist/lua-signal
 Copyright (C) 2007  Patrick J. Donnelly (batrick at batbytes.com)

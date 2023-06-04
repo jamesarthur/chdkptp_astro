@@ -1,5 +1,5 @@
 ###############################################################################
-# NOTE if misc/setup-ext-libs.bash is used
+# NOTE if misc/setup-ext-libs.bash is used 
 # a custom config.mk should not be required
 # examples below may be out of date
 ###############################################################################
@@ -42,13 +42,13 @@ CD_SUPPORT=1
 # Not required by main makefile
 IUP_DIR=/d/devel/iup
 CD_DIR=/d/devel/cd
-LIBUSB_DIR=/d/devel/libusb-win32-bin-1.2.6.0
+LIBUSB_DIR=/d/devel/libusb-win32-bin-1.2.4.0
 LUA_DIR=/d/devel/lua
 # define if you get unresolved externals on
 # GdipFontFamilyCachedGenericSansSerif building with CD context plus
-#CD_GDIP_FONT_HACK=1
+CD_GDIP_FONT_HACK=1
 
-IUP_LIB_DIR=$(IUP_DIR)/lib/mingw6
+IUP_LIB_DIR=$(IUP_DIR)/lib/mingw4
 IUP_INCLUDE_DIR=$(IUP_DIR)/include
 
 CD_LIB_DIR=$(CD_DIR)/lib
@@ -60,7 +60,7 @@ LUA_INCLUDE_DIR=$(LUA_DIR)/include
 LIBUSB_INCLUDE_DIR=$(LIBUSB_DIR)/include
 LIBUSB_LIB_DIR=$(LIBUSB_DIR)/lib/gcc
 
-# compile with debug support
+# compile with debug support 
 DEBUG=1
 
 # include svn revision in build number
@@ -68,7 +68,7 @@ DEBUG=1
 
 # You don't need to set this unless you are doing protocol development
 # if not set, included copies in the chdk_headers directory will be used
-# Used to locate CHDK ptp.h and live_view.h
-# this intentionaly uses the ROOT of the CHDK tree, to avoid header name conflicts
+# Used to locate CHDK ptp.h and live_view.h 
+# this intentionaly uses the ROOT of the CHDK tree, to avoid header name conflicts 
 # so core/ptp.h should be found relative to this
 #CHDK_SRC_DIR=/path/to/chdk/source

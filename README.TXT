@@ -1,6 +1,6 @@
 =Introduction=
 chdkptp is a tool to access the custom PTP extension of the CHDK firmware addon
-for Canon cameras.
+for Canon cameras. 
 
 chdkptp builds are labeled "alpha", but it is stable enough for everyday use.
 Protocol, functionality, APIs, commands, command line options are
@@ -16,7 +16,7 @@ See INSTALL.TXT for installation information
 
 See USAGE.TXT for end-user documentation
 
-See README-LINUX-BINARIES.TXT for information about the Linux builds (including raspberry pi)
+See README-LINUX-BINARIES.TXT for information about the Linux builds (including raspberry pi) 
 
 For information about CHDK, see http://chdk.fandom.com/wiki/CHDK
 For information about the CHDK PTP extension, see http://chdk.fandom.com/wiki/PTP_Extension
@@ -34,38 +34,27 @@ The CHDKDE ptpcam source may be found at https://app.assembla.com/spaces/chdkde/
 chdkptp includes software from several other projects, see THANKS.TXT for details.
 
 =Dependencies=
-==All builds==
-- Lua version 5.3 http://www.lua.org/versions.html
-  Lua 5.2 is supported, but minimally tested
+- IUP version 3.27 http://www.tecgraf.puc-rio.br/iup/
+  Optional, edit config.mk to build without IUP GUI support
+  Earlier 3.x versions may also work, 3.21 or later is required on linux with
+  GTK newer than 3.18
+- CD Version 5.12 http://www.tecgraf.puc-rio.br/cd/
+  Optional, used for remote display
+  Earlier 5.x versions may also work
+- Lua version 5.2 http://www.lua.org/versions.html
   Lua 5.1 is not supported, although it may work
-  Lua 5.4 is not supported
-
-==Windows==
+  Lua 5.3 has experimental support
 - libusb-win32 1.2.6.0  (Windows only)
   From https://sourceforge.net/projects/libusb-win32/files/libusb-win32-releases/1.2.6.0/
   Some earlier and later versions will also probably work, however versions
   before 1.2.4.6 used a different name for the header file.
-
-==Linux / MacOS==
-- libusb 0.1 compatibility
-  Usually a package like libusb-dev, (libusb-compat on MacOS)
+- libusb 0.1 compatibility (Linux)
+  Usually a package like libusb-dev
 - GNU readline
-  Optional, but highly recommended for CLI on Linux / MacOS
-
-==Optional IUP/CD GUI==
-- IUP version 3.30 http://www.tecgraf.puc-rio.br/iup/
-  Earlier 3.x versions may also work, 3.21 or later is required on linux with
-  GTK newer than 3.18
-- CD Version 5.14 http://www.tecgraf.puc-rio.br/cd/
-  Optional, required for IUP GUI
-  Earlier 5.x versions may also work
-
-==Optional LGI GUI==
-- LGI https://github.com/pavouk/lgi
-  Installing from package manager is recommended
+  Optional, recommended on Linux
 
 =Windows development environment=
-MSYS2 (https://www.msys2.org/) is the primary development environment.
+MSYS2 (https://www.msys2.org/) is the primary development environment. 
 All instructions below assume you are using this.
 Using a mingw bash shell for development is suggested. Note when running
 chdkptp CLI, using the standard windows command prompt console is recommended
@@ -92,7 +81,7 @@ http://chdk.fandom.com/wiki/PTP_Extension#Installing_LibUSB_using_Zadig
 
 =Linux development environment=
 A working GCC environment and some development libraries are required. The
-procedure to install them will vary depending on distro.
+procedure to install them will vary depending on distro. 
 Generally: (Deb = Debian-ish package names, Fed=Fedora-ish, YMMV)
 * Normal development stuff
  Deb: build-essential
@@ -109,28 +98,16 @@ Generally: (Deb = Debian-ish package names, Fed=Fedora-ish, YMMV)
   Deb: g++ libfreetype6-dev libgtk-3-dev libx11-dev libxpm-dev libxmu-dev libxft-dev
   Fed: gcc-c++ freetype-devel gtk3-devel libX11-devel libXpm-devel libXmu-devel libXft-devel
  Readline is optional in chdkptp, but highly recommended and expected by the default Lua build
-* GUI, LGI from OS packages
- Lua development packges
-  Deb: liblua5.2-dev or liblua5.3-dev
-  Fed: Fedora 33 does not appear to offer compatible packages
- LGI runtime
-  Deb: lua-lgi
 
 =Downloading and building dependencies=
-If building the IUP GUI or a CLI-only executable, the recommended way to obtain
-external dependencies is the shell script
+The recommended way to obtain external dependencies is the shell script
  misc/setup-ext-libs.bash
 Passing -h displays help describing options and prerequisites
 
-To build the LGI GUI, using OS provided Lua and LGI packages is recommended. In
-this case, you must configure config.mk manually, as described in
-"Configuring Makefiles" below.
-
-setup-ext-libs.bash downloads current recommended 3rd party libraries, building
-as required.  No additional makefile configuration should be required on Linux
-or msys2. On MacOS 11 (and likely other versions), it can be used to build Lua
-for a cli-only binary with -nogui, but cannot be used to build the GUI files
-on any recent MacOS version.
+This script downloads current recommended 3rd party libraries, building as
+required.  No additional makefile configuration should be required on Linux
+or msys2. It likely does not work completely on MacOS, but may provide a useful
+starting point.
 
 Development and OS package manager supplied dependencies described above
 should be installed first.
@@ -139,7 +116,7 @@ On windows and 64 bit Linux, setup-ext-libs.bash downloads pre-built IUP and CD
 libraries. On other platforms, it downloads source and builds as required. On
 non-windows platforms -force-tec-src can be used to force building from source.
 
-Use -lua-ver=52 to download and build with Lua 5.2 instead of 5.3
+Use -lua-ver=53 to download and build with Lua 5.3 instead of 5.2
 
 You can use -pretend to show the commands that would be run, including links
 to download the files. Additional options are documented in the help.
@@ -163,7 +140,7 @@ or create config.mk based on the config-*-sample.mk files to set options
 and file locations
 
 ===Lua===
-It is recommend that you build Lua from source, unless using the the LGI GUI
+It is highly recommend that you build Lua from source.
 Get the Lua source from http://www.lua.org/download.html
 
 For windows, use something like
@@ -176,7 +153,7 @@ as chdkptp itself. The lbuf file routines expect to be able to fread and fwrite 
 a FILE * opened by Lua io.open()
 
 This condition probably won't be met if you use a pre-compiled Lua dll on windows.
-It's probably OK with a shared Lua in typical Linux environments.
+It's probably OK with a shared Lua in typical Linux environments. 
 If in doubt, build your own Lua with the same compiler you build chdkptp with.
 
 ===LibUSB===
@@ -207,7 +184,7 @@ iup-3.21-Lua52_Linux313_64_lib.tar.gz
 
 The LinuxNNN number refers to the kernel version. An exact match for the kernel
 you are running is generally not required, but a closer number is usually
-preferred.
+better.
 
 Unpack all the packages, with both the main library and Lua contents in the
 same directory. If you put them in the same structure as would be created
@@ -235,24 +212,13 @@ options.
 
 To build with Lua 5.3, set USE_LUA_VER=53
 
-If building the IUP GUI, adjust IUP_LIB_DIR, IUP_INCLUDE_DIR,
-CD_LIB_DIR and CD_INCLUDE_DIR in config.mk to point to where you unpacked
-the packages.
-
-If building the LGI GUI, set
-GTK_SUPPORT=1
-and make sure the IUP/CD options are unset.
-
-If using distro-provided Lua packages, set the Lua path variables like
-LUA_INCLUDE_DIR=/usr/include/lua5.3
-LUA_LIB=lua5.3
-This may vary depending on the distro and Lua version.
+Adjust the IUP_LIB_DIR, IUP_INCLUDE_DIR, CD_LIB_DIR and CD_INCLUDE_DIR in
+config.mk to point to where you unpacked the packages
 
 Paths for library and include directories should be absolute, not relative.
 
 ==Mac development==
-See README-MACOS.TXT but beware it may be incomplete and outdated.
-The alternate LGI based GUI can be used on Mac. The IUP/CD GUI likely cannot.
+See README-OSX.TXT but beware the GUI likely cannot be built on modern versions
 
 =Building chdkptp=
 Run make in the source directory to build chdkptp.
@@ -293,8 +259,8 @@ will be created on the camera.
 
 Camtests will also create and delete some files and directories on the camera.
 
-The final line of output from both test modules should mention only passed
-and skipped, with no failures
+The final line of output from both test modules should be 
+failed 0
 
 None of the above is a comprehensive test of chdkptp functionality.
 

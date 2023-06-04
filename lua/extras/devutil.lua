@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2016-2023 <reyalp (at) gmail dot com>
+ Copyright (C) 2016-2020 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -22,7 +22,6 @@ local m={}
 local proptools=require'extras/proptools'
 local paramtools=require'extras/paramtools'
 local vxromlog=require'extras/vxromlog'
-local argparser = require'argparser'
 
 m.stop_uart_log = function()
 	if not m.logname then
@@ -48,18 +47,16 @@ m.init_cli = function()
 		names={'dlstart'},
 		help='start uart log w/large log buffers',
 		arghelp="[options] [file]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			csize=0x6000,
 			clevel=0x20,
 			a=false,
-			ckeep=false,
 		},
 		help_detail=[[
  [file] name for log file, default A/dbg.log
  options
   -csize=<n> camera log buffer size, default 0x6000
   -clevel=<n> camera log level, messages with matching bits set are logged. default 0x20
-  -ckeep=<boolean> do not restart camera log (csize/clevel ignored)
   -a  append to existing log
  requires native calls enabled, camera with uart log support (all DryOS)
 ]],
@@ -74,16 +71,13 @@ m.init_cli = function()
 				logsize=tonumber(args.csize)+512,
 				clevel=tonumber(args.clevel),
 				csize=tonumber(args.csize),
-				ckeep=args.ckeep,
 			}
 			con:execwait('opts='..serialize(opts)..[[
 
-if not opts.ckeep then
-	call_event_proc('StopCameraLog')
-	sleep(200)
-	call_event_proc('StartCameraLog',opts.clevel,opts.csize)
-	sleep(100)
-end
+call_event_proc('StopCameraLog')
+sleep(200)
+call_event_proc('StartCameraLog',opts.clevel,opts.csize)
+sleep(100)
 require'uartr'.start(opts.logname,opts.overwrite,opts.logsize)
 sleep(100)
 call_event_proc('Printf',
@@ -102,7 +96,7 @@ call_event_proc('Printf',
 		names={'dlgetcam'},
 		help='print camera log on uart, download uart log',
 		arghelp="[local]",
-		args=argparser.create{},
+		args=cli.argparser.create{},
 		help_detail=[[
  [local] name to download log to, default same as uart log
  log must have been started with dlstart
@@ -128,7 +122,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
 		names={'dlget'},
 		help='download uart log',
 		arghelp="[local]",
-		args=argparser.create{},
+		args=cli.argparser.create{},
 		help_detail=[[
  [local] name to download log to, default same as uart log
  log must have been started with startlog
@@ -165,7 +159,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
 		names={'dpget'},
 		help='get range of propcase values',
 		arghelp="[options]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			s=0,
 			e=999,
 			c=false,
@@ -191,7 +185,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
 		names={'dpsave'},
 		help='save propcase values obtained with dpget',
 		arghelp="[file]",
-		args=argparser.create{ },
+		args=cli.argparser.create{ },
 		help_detail=[[
  [file] output file
 ]],
@@ -211,7 +205,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
 		names={'dpcmp'},
 		help='compare current propcase values with last dpget',
 		arghelp="[options]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			c=false,
 		},
 		help_detail=[[
@@ -230,7 +224,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
 		names={'dfpget'},
 		help='get range of flash param values',
 		arghelp="[options]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			s=0,
 			e=false,
 			c=false,
@@ -260,7 +254,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
 		names={'dfpsave'},
 		help='save flash param values obtained with dfpget',
 		arghelp="[file]",
-		args=argparser.create{ },
+		args=cli.argparser.create{ },
 		help_detail=[[
  [file] output file
 ]],
@@ -280,7 +274,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
 		names={'dfpcmp'},
 		help='compare current param values with last dfpget',
 		arghelp="[options]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			c=false,
 		},
 		help_detail=[[
@@ -299,7 +293,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
 		names={'dsearch32'},
 		help='search memory for specified 32 bit value',
 		arghelp="[-l=<n>] [-c=<n>] [-cb=<n>] [-ca=<n>] <start> <end> <val>",
-		args=argparser.create{
+		args=cli.argparser.create{
 			l=false,
 			c=false,
 			cb=false,
@@ -310,7 +304,7 @@ call_event_proc('Printf','%s dlgetcam end\n',os.date('%Y%m%d %H:%M:%S'))
  <end>   end address
  <val>   value to find
  options
-  -l=<n> stop after n matches
+  -l=<n> stop after n matches 
   -c=<n> show N words before and after
   -cb=<n> show N words before match
   -ca=<n> show N words after match
@@ -362,7 +356,7 @@ mem_search_word{start=0x%x, last=0x%x, val=0x%x, limit=%s}
 					local count=ctx_before + ctx_after + 1
 					cli:print_status(cli:execute(('rmem -i32 0x%08x %d'):format(adr,count)))
 				else
-					printf("0x%08x\n",adr)
+					printf("0x%08x\n",adr) 
 				end
 			end
 			return true
@@ -372,7 +366,7 @@ mem_search_word{start=0x%x, last=0x%x, val=0x%x, limit=%s}
 		names={'dromlog'},
 		help='get camera romlog',
 		arghelp="[options] [dest]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			p=false,
 			pa=false,
 			nodecode=false,
@@ -395,7 +389,7 @@ mem_search_word{start=0x%x, last=0x%x, val=0x%x, limit=%s}
 			local gkdst
 			local errdst
 			if dst then
-				-- make GK log name based on dest
+				-- make GK log name based on dest 
 				local dstbase=fsutil.split_ext(dst)
 				gkdst=dstbase..'-GK.LOG'
 				errdst=dstbase..'-Err.LOG'
@@ -470,7 +464,7 @@ end
 				if vxlog then
 					vxlog:print_all()
 				else
-					printf("%s",fsutil.readfile(dst,{bin=true}))
+					printf("%s",fsutil.readfile_e(dst,'b'))
 				end
 			elseif args.p then
 				if vxlog then
@@ -493,7 +487,7 @@ end
 		names={'dscriptdisk'},
 		help='make script disk',
 		arghelp="",
-		args=argparser.none,
+		args=cli.argparser.none,
 		help_detail=[[
 Prepare card as Canon Basic script disk. Requires native calls
 ]],
@@ -524,7 +518,7 @@ end
 		names={'dvxromlog'},
 		help='decode VxWorks ROMLOG',
 		arghelp="<infile> [outfile]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			all=false,
 	 	},
 		help_detail=[[
@@ -559,19 +553,18 @@ end
 		names={'dptpsendobj'},
 		help='upload a file using standard PTP',
 		arghelp="<src> <dst>",
-		args=argparser.create{
+		args=cli.argparser.create{
 			ofmt=0xbf01,
 	 	},
 		help_detail=[[
  <src> local file to upload
- <dst> name to upload to
+ <dst> name to upload to.
  options
   -ofmt     object format code, default 0xbf01
 
 NOTE:
-Depending camera model dst must either be a bare filename, or start with A/
-A540 (VxWorks) and Elph130 (DryOS r52) crash if A/ IS present
-D10 (DryOS r31) crashes if A/ IS NOT present
+Some cameras (Digic 2, VxWorks A540) crash if dst DOES NOT start with A/
+Others (Digic 4, DryOS) crash if it DOES start with A/
 Either crash is an assert in OpObjHdl.c
 
 ]],
@@ -584,7 +577,7 @@ Either crash is an assert in OpObjHdl.c
 			if not dst then
 				return false,'missing dst'
 			end
-			local data=fsutil.readfile(src,{bin=true})
+			local data=fsutil.readfile_e(src,'b')
 			local ofmt=tonumber(args.ofmt)
 			cli.infomsg("SendObjectInfo(Filename=%s,ObjectFormat=0x%x,ObjectCompressedSize=%d)\n", dst,ofmt,data:len())
 			local objh = con:ptp_send_object_info({
@@ -601,7 +594,7 @@ Either crash is an assert in OpObjHdl.c
 		names={'dptplistobjs'},
 		help='List objects PTP objects',
 		arghelp="[options] [handle1] ...",
-		args=argparser.create{
+		args=cli.argparser.create{
 			stid=0xFFFFFFFF,
 			ofmt=0,
 			assoc=0,
@@ -616,9 +609,9 @@ Either crash is an assert in OpObjHdl.c
   -h		only list handles, do not query info
 
 NOTE:
-Listing all handles normally causes the camera display to go black and makes
-switching to shooting mode fail unless event 4482 (DryOS) or 4418 (VxWorks)
-is sent, USB is disconnected, or the camera is restarted
+Listing all handles will probably cause the camera display to go black and make
+switching to shooting mode impossible until USB is disconnected or the camera
+is restarted
 
 ]],
 		func=function(self,args)
@@ -646,11 +639,11 @@ is sent, USB is disconnected, or the camera is restarted
 		names={'dptpstorageinfo'},
 		help='List PTP storage info',
 		arghelp="[storage id] | [-i]",
-		args=argparser.create{
+		args=cli.argparser.create{
 			i=false
 		},
 		help_detail=[[
- [storage id]   list only information for a specific storage id. Default all
+ [stoarge id]   list only information for a specific storage id. Default all
 
  options
   -i only list IDs without querying info
@@ -660,10 +653,10 @@ is sent, USB is disconnected, or the camera is restarted
 			local sids
 			if args[1] then
 				sids={tonumber(args[1])}
-			else
+			else	
 				sids=con:ptp_get_storage_ids()
 			end
-			for i,sid in ipairs(sids) do
+			for i,sid in ipairs(sids) do 
 				if args.i then
 					printf('0x%x\n',sid)
 				else
@@ -673,204 +666,6 @@ is sent, USB is disconnected, or the camera is restarted
 			end
 			return true
 		end
-	},
-	{
-		names={'dptpdevinfo'},
-		help='Display PTP device info',
-		arghelp="[options]",
-		args=argparser.create{
-			s=false,
-			oc=false,
-			ec=false,
-			ofc=false,
-			dpc=false,
-			mtp=false,
-			ac=false,
-			np=false,
-			ptpevp=false,
-			sn=false,
-		},
-		help_detail=[[
- options
-  -s   summary (default if no code options)
-  -oc  list supported operation codes
-  -ec  list supported event codes
-  -ofc list supported object format codes (image and capture)
-  -dpc list supported device property codes
-  -mtp list supported MTP object property codes, if MTP supported
-  -ac  list all supported code types (default without -s or code options)
-  -np  not paranoid, include serial and IP info
-  -ptpevp  attempt to enable ptp eventproc api before getting devinfo
-  -sn  sort code lists numerically
-
-NOTES:
-  -mtp will likely cause the cameras screen to go black, like GetObjectHandles
-  If neither -s nor code options (-oc, -ec, -ofc, -dpc) given, default is -s -ac
-
-]],
-		func=function(self,args)
-			if args.ptpevp then
-				local status,err=con:ptpevp_initiate_pcall()
-				if not status then
-					if type(err) == 'table' and err.ptp_rc == ptp.RC.OperationNotSupported then
-						printf('CANON.InitiateEventProc0 not supported\n')
-					else
-						error(err)
-					end
-				end
-			end
-			local di=con:get_ptp_devinfo(true)
-			local anyopts
-			for _,v in ipairs({'s','oc','ec','ofc','dpc','ac'}) do
-				if args[v] then
-					anyopts = true
-					break
-				end
-			end
-			if not anyopts then
-				args.s = true
-				args.ac = true
-			end
-			if args.s then
-				printf('Model: %s\n',di.model)
-				printf('Manufacturer: %s\n',di.manufacturer)
-				printf('Device Version: %s\n',di.device_version)
-				local ser = di.serial_number
-				if not ser then
-					ser='(none)'
-				elseif not args.np then
-					ser='(redacted)'
-				end
-				printf('Serial Number: %s\n',ser)
-				printf('PTP Standard Version: %d\n',di.StandardVersion)
-				printf('Vendor Extension ID: %s\n',ptp.vendor_ext_id_desc(di.VendorExtensionID) or '(none)')
-				printf('Vendor Extension Version: %s\n',di.VendorExtensionVersion or '(none)')
-				printf('Vendor Extension Description: %s\n',di.VendorExtensionDesc or '(none)')
-				printf('Functional Mode: 0x%x\n',di.FunctionalMode);
-				printf('\nConnection: \n')
-				if con.condev.transport == 'usb' then
-					printf(' USB bus=%s device=%s',con.condev.bus,con.condev.dev)
-					printf(' vendor=0x%x product=0x%x\n',con.condev.vendor_id,con.condev.product_id)
-				else
-					if args.np then
-						printf(' PTP/IP host=%s port=%s\n',con.condev.host,con.condev.port)
-					else
-						printf(' PTP/IP host=(redacted) port=(redacted)\n')
-					end
-				end
-			end
-			if args.ac then
-				args.oc = true
-				args.ec = true
-				args.ofc = true
-				args.dpc = true
-				args.mtp = true
-			end
-			local exts = con:get_ptp_ext_code_ids()
-			for _,cdesc in ipairs(ptp.devinfo_code_map) do
-				printf('\n%s:\n',cdesc.desc)
-				if args[string.lower(cdesc.cid)] then
-					local codes = di[cdesc.devid]
-					if args.sn then
-						codes = util.extend_table({},codes)
-						table.sort(codes)
-					end
-					for _,c in ipairs(codes) do
-						printf(' %s\n',con:get_ptp_code_desc(cdesc.cid,c))
-					end
-				end
-			end
-			if args.mtp and util.in_table(exts,'MTP') then
-				printf('\nMTP Object Properties Supported:\n')
-				local ofc_list = di.ImageFormats
-				if args.sn then
-					ofc_list = util.extend_table({},ofc_list)
-					table.sort(ofc_list)
-				end
-
-				for _, ofc in ipairs(ofc_list) do
-					printf(' Format %s\n',con:get_ptp_code_desc('OFC',ofc))
-					local lb=con:ptp_txn(ptp.MTP.OC.GetObjectPropsSupported,ofc,{getdata='lbuf'})
-					local count = lb:get_i32(0)
-					if lb:len() ~= count*2 + 4 then
-						util.warnf("expected data size %d not %d\n",count*2 + 4,lb:len())
-					end
-					local opc_list = {lb:get_u16(4,(lb:len()-4)/2)}
-					-- local opc_list = {lb:get_u16(4,count)}
-					if args.sn then
-						table.sort(opc_list)
-					end
-					local zcount = 0
-					for i,v in ipairs(opc_list) do
-						if v == 0 then
-							zcount = zcount + 1
-						else
-							if zcount > 0 then
-								printf("%d zeros\n",zcount)
-								zcount = 0
-							end
-							printf('  %s\n',ptp.get_code_desc('OPC',v,'MTP'))
-						end
-					end
-					if zcount > 0 then
-						printf("  (%d zeros)\n",zcount)
-					end
-				end
-			end
-			return true
-		end
-	},
-	{
-		names={'dptpgetprop'},
-		help='Display PTP device properties',
-		arghelp="[propspec]",
-		args=argparser.create{
-		},
-		help_detail=[[
- [propspec]
-   Device Property code, or name specified like [VENDOR.]Name
-   If not specified, all are displayed
-
-]],
-		func=function(self,args)
-			local propid=args[1]
-			local props
-			if propid then
-				props = tonumber(propid)
-				if not props then
-					local parts = util.string_split(args[1],'.',{plain=true,empty=false})
-					-- ptp module structured like [VENDOR.]DPC.CODE
-					if #parts == 1 then
-						table.insert(parts,1,'DPC')
-					elseif #parts == 2 then
-						table.insert(parts,2,'DPC')
-					else
-						return false, 'invalid prop spec '..tostring(args[1])
-					end
-					props = ptp.get_code_by_name(table.concat(parts,'.'))
-					if type(props) ~= 'number' then
-						return false, 'unknown prop '..tostring(args[1])
-					end
-				end
-				props = {props}
-			else
-				props = con.ptpdev.DevicePropertiesSupported
-			end
-			local pt=require'ptpprop'
-			for i,v in ipairs(props) do
-				local lb=con:ptp_txn(ptp.OC.GetDevicePropDesc,v,{getdata='lbuf'})
-				local status,err = pcall(function()
-					pt.bind(lb):describe(con.ptp_code_ids)
-				end)
-				-- some canon props seem to be malformed, like 0xd111 and 0xd112 on g7x
-				if not status then
-					printf('failed to bind prop %s\n%s\n',ptp.get_code_desc('DPC',v,con.ptp_code_ids),err)
-					printf('length %d hexdump:\n%s\n',lb:len(),util.hexdump(lb:string()))
-				end
-				printf('\n')
-			end
-			return true
-		end,
 	},
 
 }

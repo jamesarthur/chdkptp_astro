@@ -1,19 +1,24 @@
 #!/bin/sh
 # copy this file to chdkptp.sh and adjust for your configuration
-# chdkptp binary
+# to use the GUI build from a binary package that includes both CLI and GUI change to chdkptp_gui
 CHDKPTP_EXE=chdkptp
 
-CHDKPTP_DIR=?    'edit and set location where the chdkptp exeutable can be found'
+# path where chdkptp is installed
+# osx has no obvious shell way to get an absolute path
+selfpath=$(python <<EOF
+import os.path
+print os.path.abspath('$0')
+EOF
+)
+CHDKPTP_DIR=$(dirname "$selfpath")
+# if you don't want to fire up python every time, you could hard-code it instead
+#CHDKPTP_DIR=$HOME/CHDK/chdkptp
+
 
 # path for shared libraries
 export DYLD_LIBRARY_PATH="$CHDKPTP_DIR/lib"
 
 export LUA_PATH="$CHDKPTP_DIR/lua/?.lua;;"
 export LUA_CPATH="$CHDKPTP_DIR/?.so;;"
-
-# for LGI GUI, you may need something like the following
-# export LUA_PATH="$HOME/.luarocks/share/lua/5.3/?.lua;$CHDKPTP_DIR/lua/?.lua;;"
-# export LUA_CPATH="$HOME/.luarocks/lib/lua/5.3/?.so;$CHDKPTP_DIR/?.so;;"
-# or use eval `luarocks --lua-dir=/usr/local/opt/lua@5.3 path` to set luarocks paths
 
 "$CHDKPTP_DIR/$CHDKPTP_EXE" "$@"
