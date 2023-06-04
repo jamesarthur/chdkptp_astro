@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2014 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2021 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,12 +11,12 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
 --]]
 --[[
 CLI commands for manipulating DNG images
 ]]
+local argparser = require'argparser'
 -- store info for DNG cli commands, global for easy script access
 local m = {
 	--selected = current selected dng, or nil
@@ -122,21 +122,7 @@ local function do_dump_thumb(d,args)
 		printf("dump thumb: %s\n",tostring(filename))
 		return true
 	end
-	if not args.tfmt then
-		d.main_ifd:write_image_data(filename)
-	elseif args.tfmt == 'ppm' then
-		-- TODO should check that it's actually an RGB8 thumb
-		local fh, err = io.open(filename,'wb')
-		if not fh then
-			return false,err
-		end
-		fh:write(string.format('P6\n%d\n%d\n%d\n',
-			d.main_ifd.byname.ImageWidth:getel(),
-			d.main_ifd.byname.ImageLength:getel(),255))
-		d.main_ifd:write_image_data(fh)
-		fh:close()
-	end
-	return true
+	return d:dump_thumb(filename,{ppm = (args.tfmt == 'ppm')})
 end
 
 local function do_dump_raw(d,args)
@@ -200,7 +186,7 @@ local function dngbatch_docmd(cmd,dargs)
 			end
 		end
 	end
-	
+
 	-- TODO based on cli.execute
 	local cstatus,status,msg = xpcall(
 		function()
@@ -240,7 +226,7 @@ local function dngbatch_callback(self,opts)
 	else
 		d,err = dng.load(src)
 		-- TODO warn and continue?
-		if not d then 
+		if not d then
 			errlib.throw{etype='dng',msg=tostring(err)}
 		end
 	end
@@ -262,7 +248,7 @@ local function dngbatch_callback(self,opts)
 	batch = {}
 end
 
-local dngbatch_ap=cli.argparser.create{
+local dngbatch_ap=argparser.create{
 	patch=false,
 	fmatch=false,
 	rmatch=false,
@@ -346,7 +332,7 @@ m.init_cli = function()
 		names={'dngload'},
 		help='load a dng file',
 		arghelp="[options] <file>",
-		args=cli.argparser.create({
+		args=argparser.create({
 			nosel=false,
 		}),
 		-- TODO options to reload or select/ignore if same file already loaded
@@ -356,12 +342,12 @@ m.init_cli = function()
  options
    -nosel  do not automatically select loaded file
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			if not args[1] then
 				return false,'expected filename'
 			end
 			local d,err = dng.load(args[1])
-			if not d then 
+			if not d then
 				return false,err
 			end
 			if not args.nosel then
@@ -376,7 +362,7 @@ m.init_cli = function()
 		names={'dngsave'},
 		help='save a dng file',
 		arghelp="[options] [image num] [file]",
-		args=cli.argparser.create({
+		args=argparser.create({
 			over=false,
 			keepmtime=false,
 		}),
@@ -387,7 +373,7 @@ m.init_cli = function()
    -over     overwrite existing files
    -keepmtime preserve existing modification time
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local filename
 			local narg
 			-- TODO this will prevent you from saving a file named '1' without explicit image number
@@ -415,10 +401,7 @@ m.init_cli = function()
 				mtime = lfs.attributes(filename,'modification')
 			end
 
-			local fh,err = io.open(filename,'wb')
-			if not fh then
-				return false, err
-			end
+			local fh = fsutil.open_e(filename,'wb')
 
 			local status, err = d._lb:fwrite(fh)
 			fh:close()
@@ -437,8 +420,8 @@ m.init_cli = function()
 		names={'dngunload'},
 		help='unload dng file',
 		arghelp="[image num]",
-		args=cli.argparser.create({}),
-		func=function(self,args) 
+		args=argparser.create({}),
+		func=function(self,args)
 			if #args > 0 then
 				narg = table.remove(args,1)
 			end
@@ -455,11 +438,11 @@ m.init_cli = function()
 		end,
 	},
 	{
-		-- TODO file output, histogram, ifd values, individual ifd values
+		-- TODO file output, ifd values, individual ifd values
 		names={'dnginfo'},
 		help='display information about a dng',
 		arghelp="[options] [image num]",
-		args=cli.argparser.create({
+		args=argparser.create({
 			s=false,
 			ifd=false,
 			h=false,
@@ -471,12 +454,12 @@ m.init_cli = function()
    -s   summary info, default if no other options given
    -h   tiff header
    -ifd[=<ifd>]
-   	 raw, exif, main, or 0, 0.0 etc. default 0
+     raw, exif, main, or 0, 0.0 etc. default 0
    -r   recurse into sub-ifds
    -vals[=N]
      display up to N values for each IFD entry, default 20
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local d = m.get_sel_batch(args[1])
 			if not d then
 				return false, 'no file selected'
@@ -533,7 +516,7 @@ m.init_cli = function()
 		names={'dnghist'},
 		help='generate a histogram',
 		arghelp="[options] [image num]",
-		args=cli.argparser.create({
+		args=argparser.create({
 			min=false,
 			max=false,
 --			out=false,
@@ -545,22 +528,31 @@ m.init_cli = function()
 		-- TODO arbitrary rect
 		-- text or netpbm file output
 		--[[
-  -out=<file> 
+  -out=<file>
   	<file> is name of output file
 	]]
-		
+
 		help_detail=[[
  options:
   -min=N   list pixels with value >= N
   -max=N   list pixels with value <= N
   -reg=<active|all>
-  	region of image to search, either active area (default) or all
+    region of image to search, either active area (default) or all
   -bin=<n>
     number of values in histogram bin
-  -fmt=<count|%>
-    format for output
+  -fmt=<count|%[format]>
+    count displays bin counts directly
+    % displays percentages, modified by [format] optionally consisting of
+     'r' percent is of range specified by min/max, instead of total
+     '.' or '#' plot percent with repetitions of the . or # character
+     [width] maximum number of characters, default 100
+     '!' scale largest bin to [width]
+    examples
+     -fmt=%      numeric percentage of histogram total
+     -fmt=%r     numeric percentage of range specified by min/max
+     -fmt=%#120! lines of '#' with 120 repetitions for the largest bin
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local d = m.get_sel_batch(args[1])
 			if not d then
 				return false, 'no file selected'
@@ -568,7 +560,7 @@ m.init_cli = function()
 
 			local ifd=d.raw_ifd
 
-			local vmin = 0 
+			local vmin = 0
 			local vmax = ifd.byname.WhiteLevel:getel()
 
 			if args.min then
@@ -593,51 +585,14 @@ m.init_cli = function()
 				return false, 'invalid region'
 			end
 
-			if args.fmt ~= '%' and args.fmt ~= 'count' then
-				return false, 'invalid format'
-			end
-
 			local h = d:build_histogram({top=top,left=left,bottom=bottom,right=right})
 			local binsize = tonumber(args.bin)
-			
-			local fmt_range
-			local fmt_count
-			if args.fmt == '%' then
-				fmt_count = function(count)
-					return string.format('%f',(count / h.total) * 100)
-				end
-			else
-				fmt_count = function(count)
-					return tostring(count)
-				end
-			end
-			if binsize == 1 then
-				fmt_range = function(v1)
-					return tostring(v1)
-				end
-			else
-				fmt_range = function(v1,v2)
-					return string.format('%d-%d',v1,v2)
-				end
-			end
-
-			local outfn=function(count,v1,v2)
-				printf("%s %s\n",fmt_range(v1,v2),fmt_count(count))
-			end
-
-			local v = vmin
-
-			while v <= vmax do
-				local count = 0
-				for i=0,binsize - 1 do
-					-- bin size may not evenly divide range
-					if v+i <= vmax then
-						count = count + h[v+i]
-					end
-				end
-				outfn(count,v,v+binsize-1)
-				v = v + binsize
-			end
+			h:print({
+				min=vmin,
+				max=vmax,
+				fmt=args.fmt,
+				bin=binsize,
+			})
 			return true
 		end,
 	},
@@ -646,7 +601,7 @@ m.init_cli = function()
 		names={'dnglistpixels'},
 		help='generate a list of pixel coordinates',
 		arghelp="[options] [image num]",
-		args=cli.argparser.create({
+		args=argparser.create({
 			min=false,
 			max=false,
 			out=false,
@@ -659,17 +614,17 @@ m.init_cli = function()
  options:
   -min=N   list pixels with value >= N
   -max=N   list pixels with value <= N
-  -out=<file> 
-  	<file> is name of output file
+  -out=<file>
+    <file> is name of output file
   -fmt=<chdk|rt|dcraw|count>
-  	format badpixel list for chdk badpixel.txt, raw therapee, dcraw, or just count them
+    format badpixel list for chdk badpixel.txt, raw therapee, dcraw, or just count them
   -reg=<active|all>
-  	region of image to search, either active area (default) or all
+    region of image to search, either active area (default) or all
   -coords=<abs|rel>
     output coordinates relative to region, or absolute
     use rel for raw therapee and dcraw
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local d = m.get_sel_batch(args[1])
 			if not d then
 				return false, 'no file selected'
@@ -729,11 +684,7 @@ m.init_cli = function()
 			if args.fmt == 'count' then
 				outfn = function() end
 			elseif args.out then
-				local err
-				fh,err = io.open(args.out,'wb')
-				if not fh then return
-					false, err
-				end
+				fh = fsutil.open_e(args.out,'wb')
 
 				outfn = function(fmt,x,y)
 					fh:write(string.format(fmt,x,y))
@@ -761,7 +712,7 @@ m.init_cli = function()
 	{
 		names={'dnglist'},
 		help='list loaded dng files',
-		func=function(self,args) 
+		func=function(self,args)
 			local r=''
 			for i, d in ipairs(m.list) do
 				if d == m.selected then
@@ -778,14 +729,14 @@ m.init_cli = function()
 		names={'dngsel'},
 		help='select dng',
 		arghelp="<number>",
-		args=cli.argparser.create({
+		args=argparser.create({
 			ifds=false,
 		}),
 		help_detail=[[
  number:
    dng number from dnglist to select
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local n = tonumber(args[1])
 			if m.list[n] then
 				m.selected = m.list[n]
@@ -798,7 +749,7 @@ m.init_cli = function()
 		names={'dngmod'},
 		help='modify dng',
 		arghelp="[options] [files]",
-		args=cli.argparser.create({
+		args=argparser.create({
 			patch=false,
 			over=false,
 		}),
@@ -807,7 +758,7 @@ m.init_cli = function()
  options:
    -patch[=n]   interpolate over pixels with value less than n (default 0)
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local d = m.get_sel_batch(args[1])
 			if not d then
 				return false, 'no file selected'
@@ -829,7 +780,7 @@ m.init_cli = function()
 		help='extract data from dng',
 		arghelp="[options] [image num]",
 		-- TODO scale options
-		args=cli.argparser.create({
+		args=argparser.create({
 			thm=false,
 			raw=false,
 			rfmt=false,
@@ -843,12 +794,12 @@ m.init_cli = function()
    -over         overwrite existing file
    -rfmt=fmt raw format (default: unmodified from DNG)
      format is <bpp>[endian][pgm], e.g. 8pgm or 12l
-	 pgm is only valid for 8 and 16 bpp
-	 endian is l or b and defaults to little, except for 16 bit pgm
+     pgm is only valid for 8 and 16 bpp
+     endian is l or b and defaults to little, except for 16 bit pgm
    -tfmt=fmt thumb format (default, unmodified rgb)
      ppm   8 bit rgb ppm
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local d = m.get_sel_batch(args[1])
 			if not d then
 				return false, 'no file selected'
@@ -872,6 +823,7 @@ m.init_cli = function()
 		names={'dngbatch'},
 		help='manipulate multiple files',
 		arghelp="[options] [files] { command ; command ... }",
+		args=argparser.nop,
 		-- TODO should allow filename substitutions for commands, e.g. dump -raw=$whatever
 		help_detail=[[
  options:

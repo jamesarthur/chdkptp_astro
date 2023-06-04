@@ -7,8 +7,8 @@
 #ifdef WIN32
 #include <winsock2.h>
 #elif defined(__APPLE__)
-#include <arpa/inet.h> 
-#include <libkern/OSByteOrder.h> 
+#include <arpa/inet.h>
+#include <libkern/OSByteOrder.h>
 #else
 /* ntohl and relatives live here */
 #include <arpa/inet.h>
@@ -52,12 +52,14 @@
 #define BE16TOH(x) (x) = be16toh(x)
 
 /* On little endian machines, these macros are null */
+#ifndef htole16
 #define htole16(x)      (x)
 #define htole32(x)      (x)
 #define htole64(x)      (x)
 #define le16toh(x)      (x)
 #define le32toh(x)      (x)
 #define le64toh(x)      (x)
+#endif
 
 #define HTOLE16(x)      (void) (x)
 #define HTOLE32(x)      (void) (x)

@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2014 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2022 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,20 +11,24 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
 --]]
 --[[
-local path and filesystem related utilities
-depends on sys.ostype, errlib and lfs
+path and filesystem related utilities
+funtions ending in _cam deal with camera side paths
+depends on util, sys.ostype, errlib and lfs
 ]]
 local fsutil={}
---[[
-valid separator characters
-]]
+
 -- default function for ostype, can override for testing
 fsutil.ostype = sys.ostype
 
+-- windows needs custom popen on Lua 5.3, provided by syslib when needed
+fsutil._popen = sys.popen or io.popen
+
+--[[
+valid separator characters
+]]
 function fsutil.dir_sep_chars()
 	if fsutil.ostype() == 'Windows' then
 		return '\\/'
@@ -42,6 +46,13 @@ function fsutil.is_dir_sep(c)
 	return false
 end
 
+-- switch all slashes to / on windows
+function fsutil.normalize_dir_sep(path)
+	if fsutil.ostype() == 'Windows' then
+		path=string.gsub(path, "\\", "/")
+	end
+	return path
+end
 --[[
 remove suffix from a path if found
 opts {
@@ -146,7 +157,7 @@ end
 --[[
 dirname variant for camera paths
 note, A/ is ambiguous if used on relative paths, treated specially
-has trailing directory removed, except for A/ (camera functions trailing / on A/ and reject on subdirs) 
+has trailing directory removed, except for A/ (camera functions require trailing / on A/ and reject on subdirs)
 A/ must be uppercase (as required by dryos)
 ]]
 function fsutil.dirname_cam(path)
@@ -157,8 +168,8 @@ function fsutil.dirname_cam(path)
 		return path
 	end
 	-- remove trailing blah/?
-	dn=string.gsub(path,'[^/]+/*$','')
-	-- invalid, 
+	local dn=string.gsub(path,'[^/]+/*$','')
+	-- invalid,
 	if dn == '' then
 		return nil
 	end
@@ -174,7 +185,7 @@ function fsutil.dirname_cam(path)
 	return dn
 end
 
---[[ 
+--[[
 add / between components, only if needed.
 accepts / or \ as a separator on windows
 TODO joinpath('c:','foo') becomes c:/foo
@@ -215,7 +226,7 @@ end
 
 --[[
 split a path into an array of components
-the leading component will may have a /, drive or .
+the leading component will have a /, drive or .
 ]]
 function fsutil.splitpath(path)
 	local parts={}
@@ -266,7 +277,7 @@ function fsutil.split_ext(path)
 	return fsutil.remove_sfx(path,ext),ext
 end
 --[[
-ensure path starts with A/, replace \ with / 
+ensure path starts with A/, replace \ with /
 ]]
 function fsutil.make_camera_path(path)
 	if not path then
@@ -282,6 +293,69 @@ function fsutil.make_camera_path(path)
 		return 'A' .. string.sub(path,2,-1)
 	end
 	return 'A/' .. path
+end
+
+--[[
+split useful information out of a full camera image path like 'A/DCIM/139___10/IMG_5609.JPG'
+partial paths e.g. just image name are handled
+parsed=fsutil.parse_image_path_cam(path,opts)
+opts {
+	string=bool -- return missing components as empty string, default true. otherwise, nil
+}
+parsed {
+	name=string -- full name, e.g 'IMG_5609.JPG'
+	basename=string -- 'IMG_5609'
+	ext=string -- '.JPG'
+	imgnum=string or nil -- number portion e.g. '5609'
+	imgnpfx=string or nil -- prefix portion, e.g. 'IMG_'
+	pathparts=array -- path components as an array from splitpath_cam, e.g. {'A/','DCIM','139___10','IMG_5609.JPG'}
+	subdir=string or nil -- parent directory of image, e.g. '139___10' or '101CANON'
+	dirnum=string or nil -- directory number '139'
+	dirmonth=string or nil -- month from date based directory name, e.g. '10'
+	dirday=string or nil -- day from date based directory name
+}
+]]
+function fsutil.parse_image_path_cam(path,opts)
+	opts = util.extend_table({string=true},opts)
+	local r={}
+	r.pathparts = fsutil.splitpath_cam(path)
+	r.name = fsutil.basename_cam(r.pathparts[#r.pathparts])
+	r.basename,r.ext = fsutil.split_ext(r.name)
+
+	-- split_ext defaults to empty string
+	if r.ext == '' and not opts.string then
+		r.ext = nil
+	end
+
+	r.imgnum = string.match(r.basename,'(%d%d%d%d)$')
+	r.imgpfx = string.match(r.basename,'^(...)_%d%d%d%d$')
+
+	r.subdir = r.pathparts[#r.pathparts - 1]
+	if r.subdir then
+		-- 100CANON or 100_xxxx or 100___xx
+		r.dirnum = string.match(r.subdir,'^(%d%d%d)')
+
+		-- try date folder, daily naming
+		local dirmonth,dirday = string.match(r.subdir,'_(%d%d)(%d%d)$')
+		if dirmonth then
+			r.dirmonth = dirmonth
+			r.dirday = dirday
+		else
+			-- try date folder, monthly naming
+			local dirmonth = string.match(r.subdir,'_(%d%d)$')
+			if dirmonth then
+				r.dirmonth = dirmonth
+			end
+		end
+	end
+	if opts.string then
+		for i,k in ipairs{'imgnum','imgpfx','subdir','dirnum','dirmonth','dirday'} do
+			if not r[k] then
+				r[k]='';
+			end
+		end
+	end
+	return r
 end
 
 --[[
@@ -303,9 +377,9 @@ function fsutil.mkdir_m(path)
 		p = fsutil.joinpath(p,parts[i])
 		local mode = lfs.attributes(p,'mode')
 		if not mode then
-			local status,err = lfs.mkdir(p)
+			local status,err, errno = lfs.mkdir(p)
 			if not status then
-				errlib.throw{etype='lfs', msg=tostring(err)}
+				errlib.throw{etype='lfs', errno=errno, msg=tostring(err)}
 			end
 		elseif mode ~= 'directory' then
 			errlib.throw{etype='exists', msg='path exists, not directory'}
@@ -353,9 +427,9 @@ function fs_iter:recurse()
 end
 
 function fs_iter:singleitem(path)
-	local st,err=lfs.attributes(path)
+	local st,err, errno=lfs.attributes(path)
 	if not st then
-		errlib.throw{etype='lfs',msg=tostring(err)}
+		errlib.throw{etype='lfs', errno=errno, msg=tostring(err)}
 	end
 	self.cur={st=st,full=path,name=fsutil.basename(path)}
 	-- root directory (or bare drive on win) returns nil
@@ -380,7 +454,7 @@ function fs_iter:singledir()
 end
 
 function fs_iter.run(paths,opts)
-	local t=extend_table({},opts)
+	local t=util.extend_table({},opts)
 	util.mt_inherit(t,fs_iter)
 
 	for i,path in ipairs(paths) do
@@ -409,13 +483,15 @@ process directory tree with matching
 paths=<array of paths to process>
 opts={
 	fmatch='<pattern>', -- match on full path of files, default any (NOTE can match on filename with /<match>$)
-	dmatch='<pattern>', -- match on names of directories, default any 
-	rmatch='<pattern>', -- recurse into directories matching, default any 
+	dmatch='<pattern>', -- match on names of directories, default any
+	rmatch='<pattern>', -- recurse into directories matching, default any
+	sizemin=number      -- minimum file size in bytes
+	sizemax=number      -- maximum file size in bytes
 	fsfx='string',      -- compare (not pattern) suffix of file, can be used for extension
-	fsfx_ic=bool,       -- should suffix be case sensitive (default false)
+	fsfx_ic=bool,       -- should suffix be case insensitive (default true)
 	dirs=true, -- pass directories to func. otherwise only files sent to func, but dirs are still recursed
 	dirsfirst=false, -- process directories before contained files
-	maxdepth=100, -- maxium depth of directories to recurse into, 0=just process paths passed in, don't recurse
+	maxdepth=100, -- maximum depth of directories to recurse into, 0=just process paths passed in, don't recurse
 	martians=bool, -- process non-file, not directory items (devices etc) default false
 }
 ]]
@@ -448,8 +524,14 @@ function fsutil.find_files(paths,opts,func)
 		end,
 		ff_check_match=function(self,opts)
 			if self.cur.st.mode == 'file' then
-				if opts.fmatch then
-					return string.match(self.cur.full,opts.fmatch) and self:ff_check_fsfx(opts)
+				if opts.fmatch and not string.match(self.cur.full,opts.fmatch) then
+					return false
+				end
+				if opts.sizemin and self.cur.st.size < opts.sizemin then
+					return false
+				end
+				if opts.sizemax and self.cur.st.size > opts.sizemax then
+					return false
 				end
 				return self:ff_check_fsfx(opts)
 			end
@@ -505,10 +587,15 @@ in_paths
 opts:{
 	pretend=bool
 	verbose=bool
+	info_fn=function -- printf like function for verbose
 }
+
+throws on error
 --]]
 function fsutil.rm_r(in_paths,opts)
-	opts = util.extend_table({},opts)
+	opts = util.extend_table({
+		info_fn=util.printf,
+	},opts)
 	if type(in_paths) == 'string' then
 		in_paths={in_paths}
 	end
@@ -519,21 +606,21 @@ function fsutil.rm_r(in_paths,opts)
 			local mode = lfs.attributes(p,'mode')
 			if opts.pretend or opts.verbose then
 				if mode == 'directory' then
-					printf("lfs.rmdir('%s')\n",p)
+					opts.info_fn("lfs.rmdir('%s')\n",p)
 				else
-					printf("os.remove('%s')\n",p)
+					opts.info_fn("os.remove('%s')\n",p)
 				end
 			end
 			if not opts.pretend then
 				-- on windows, os.remove does not remove directories, even if empty
-				local status, err
+				local status, err, errno
 				if mode == 'directory' then
-					status,err=lfs.rmdir(p)
+					status,err,errno=lfs.rmdir(p)
 				else
-					status,err=os.remove(p)
+					status,err,errno=os.remove(p)
 				end
 				if not status then
-					error(tostring(err))
+					errlib.throw{etype='io', errno=errno, msg=tostring(err)}
 				end
 			end
 		end
@@ -548,7 +635,7 @@ function fsutil.popen(prog,mode)
 	if not mode then
 		mode = 'r'
 	end
-	-- windows - add a b if mode is one char, othewise leave alone
+	-- windows - add a b if mode is one char, otherwise leave alone
 	if fsutil.ostype() == 'Windows' then
 		if string.len(mode) == 1 then
 			mode = mode .. 'b'
@@ -557,6 +644,139 @@ function fsutil.popen(prog,mode)
 		-- other os - if mode is two chars, truncate to 1
 		mode = string.sub(mode,1,1)
 	end
-	return io.popen(prog,mode)
+	return fsutil._popen(prog,mode)
 end
+
+--[[
+wrapper for os.remove that throws on error
+]]
+function fsutil.remove_e(path)
+	local status, err, errno = os.remove(path)
+	if not status then
+		errlib.throw{etype='io', errno = errno, msg=tostring(err)}
+	end
+end
+--[[
+wrapper for fsutil.popen that throws on error
+]]
+function fsutil.popen_e(prog,mode)
+	local fh, err, errno=fsutil.popen(prog,mode)
+	if not fh then
+		errlib.throw{etype='io', errno=errno, msg=tostring(err)}
+	end
+	return fh
+end
+--[[
+wrapper for io.open that throws on error
+]]
+function fsutil.open_e(path,mode)
+	local fh, err, errno=io.open(path,mode)
+	if not fh then
+		errlib.throw{etype='io', errno=errno, msg=tostring(err)}
+	end
+	return fh
+end
+--[[
+DEPRECATED - for backward compatibility only, use fsutil.readfile instead
+read the entire contents of file, throw on error
+mode='b' for binary where applicable
+]]
+function fsutil.readfile_e(path,mode)
+	util.warnf("fsutil.readfile_e is deprecated, use fsutil.readfile\n")
+	return fsutil.readfile(path,{bin=(mode == 'b')})
+end
+
+--[[
+read the entire contents of file, throw on error
+opts: {
+	bin=boolean - use binary mode where applicable
+	missing_ok=boolean - return nil if file doesn't exist
+	                     note other error conditions still throw
+}
+]]
+function fsutil.readfile(path,opts)
+	local mode
+	opts = opts or {}
+	if opts.bin then
+		mode = 'rb'
+	else
+		mode = 'r'
+	end
+	local fh,err,errno=io.open(path,mode)
+	if not fh then
+		if opts.missing_ok and errno == errno_vals.ENOENT then
+			return nil
+		end
+		errlib.throw{etype='io',errno=errno, msg=tostring(err)}
+	end
+	local r,err,errno=fh:read('*a')
+	fh:close()
+	if not r then
+		errlib.throw{etype='io',errno=errno, msg=tostring(err)}
+	end
+	return r
+end
+--[[
+DEPRECATED - for backward compatibility only, use fsutil.writefile instead
+write string or number to file, throw on error
+mode='a','w', +'b' for binary where applicable, default 'w'
+]]
+function fsutil.writefile_e(val,path,mode)
+	util.warnf("fsutil.writefile_e is deprecated, use fsutil.writefile\n")
+	local append, bin
+	if not mode then
+		append=false
+		bin=false
+	elseif mode:match('^[aw]b?$') then
+		append = (mode:sub(1,1) == 'a')
+		bin = (mode:sub(2,2) == 'b')
+	else
+		errlib.throw{etype='bad_arg',msg='invalid mode'}
+	end
+	fsutil.writefile(path,val,{append=append,bin=bin,mkdir=false})
+end
+
+--[[
+write string or number to file, throw on error
+numbers are converted to text with tostring()
+opts: {
+	bin=boolean - write file in binary mode. Default false (text mode)
+	append=boolean - open file for append. Default false
+	mkdir=boolean - create parent directories as needed, default true
+}
+]]
+function fsutil.writefile(path,val,opts)
+	opts = util.extend_table({
+		mkdir = true,
+	},opts)
+	local mode
+	if opts.append then
+		mode = 'a'
+	else
+		mode = 'w'
+	end
+	if opts.bin then
+		mode = mode .. 'b'
+	end
+	if opts.mkdir then
+		fsutil.mkdir_parent(path)
+	end
+	if type(val) == 'number' then
+		val = tostring(val)
+	elseif type(val) ~= 'string' then
+		errlib.throw{etype='bad_arg',msg='expected string not '..type(val)}
+	end
+
+	local fh=fsutil.open_e(path,mode)
+	local status = true
+	local err, errno
+	if val:len() > 0 then
+		status,err,errno=fh:write(val)
+	end
+	fh:close()
+	if not status then
+		errlib.throw{etype='io',errno=errno, msg=tostring(err)}
+	end
+end
+
 return fsutil

@@ -185,7 +185,7 @@ void raw_set_pixel_10l(uint8_t *p, unsigned row_bytes, unsigned x, unsigned y, u
 	uint8_t* addr = p + y*row_bytes + (x/8)*10;
 	switch (x&7) {
 		case 0:
-			addr[0] = (addr[0]&0x3F)|(value<<6); 
+			addr[0] = (addr[0]&0x3F)|(value<<6);
 			addr[1] = value>>2;
 		break;
 		case 1:
@@ -197,7 +197,7 @@ void raw_set_pixel_10l(uint8_t *p, unsigned row_bytes, unsigned x, unsigned y, u
 			addr[3] = (addr[3]&0xF0)|(value>>6);
 		break;
 		case 3:
-			addr[2] = (addr[2]&0xFC)|(value>>8); 
+			addr[2] = (addr[2]&0xFC)|(value>>8);
 			addr[5] = value;
 		break;
 		case 4:
@@ -238,7 +238,7 @@ void raw_set_pixel_10b(uint8_t *p, unsigned row_bytes, unsigned x, unsigned y, u
 	switch (x&3) {
 		case 0:
 			addr[0] = value>>2;
-			addr[1] = (addr[1]&0x3F)|(value<<6); 
+			addr[1] = (addr[1]&0x3F)|(value<<6);
 		break;
 		case 1:
 			addr[1] = (addr[1]&0xC0)|(value>>4);
@@ -249,7 +249,7 @@ void raw_set_pixel_10b(uint8_t *p, unsigned row_bytes, unsigned x, unsigned y, u
 			addr[2] = (addr[2]&0xF0)|(value>>6);
 		break;
 		case 3:
-			addr[3] = (addr[3]&0xFC)|(value>>8); 
+			addr[3] = (addr[3]&0xFC)|(value>>8);
 			addr[4] = value;
 		break;
 	}
@@ -271,19 +271,19 @@ void raw_set_pixel_12l(uint8_t *p, unsigned row_bytes, unsigned x, unsigned y, u
 {
 	uint8_t *addr = p + y * row_bytes + (x/4) * 6;
 	switch (x&3) {
-		case 0: 
+		case 0:
 			addr[0] = (addr[0]&0x0F) | (value << 4);
 			addr[1] = (value >> 4);
 		break;
-		case 1: 
+		case 1:
 			addr[0] = (addr[0]&0xF0) | (value >> 8);
 			addr[3] = value;
 		break;
-		case 2: 
+		case 2:
 			addr[2] = (value >> 4);
 			addr[5] = (addr[5]&0x0F) | (value << 4);
 		break;
-		case 3: 
+		case 3:
 			addr[4] = value;
 			addr[5] = (addr[5]&0xF0) | (value >> 8);
 		break;
@@ -304,11 +304,11 @@ void raw_set_pixel_12b(uint8_t *p, unsigned row_bytes, unsigned x, unsigned y, u
 {
 	uint8_t *addr = p + y * row_bytes + (x/2) * 3;
 	switch (x&1) {
-		case 0: 
+		case 0:
 			addr[0] = (unsigned char)(value >> 4);
 			addr[1] = (addr[1]&0x0F) | (unsigned char)(value << 4);
 		break;
-		case 1: 
+		case 1:
 			addr[1] = (addr[1]&0xF0) | (unsigned char)(value >> 8);
 			addr[2] = (unsigned char)value;
 		break;
@@ -331,7 +331,7 @@ unsigned raw_get_pixel_14l(const uint8_t *p, unsigned row_bytes, unsigned x, uns
 	return 0;
 }
 
-void raw_set_pixel_14l(uint8_t *p, unsigned row_bytes, unsigned x, unsigned y, unsigned value) 
+void raw_set_pixel_14l(uint8_t *p, unsigned row_bytes, unsigned x, unsigned y, unsigned value)
 {
     uint8_t *addr = p + y * row_bytes + (x/8) * 14;
     switch (x%8) {
@@ -401,7 +401,7 @@ static int rawimg_lua_get_pixel(lua_State *L) {
 	if(x >= img->width || y >= img->height) {
 		lua_pushnil(L);
 	} else {
-		lua_pushnumber(L,img->fmt->get_pixel(img->data,img->row_bytes,x,y));
+		lua_pushinteger(L,img->fmt->get_pixel(img->data,img->row_bytes,x,y));
 	}
 	return 1;
 }
@@ -422,19 +422,19 @@ static int rawimg_lua_set_pixel(lua_State *L) {
 
 static int rawimg_lua_get_width(lua_State *L) {
 	raw_image_t* img = (raw_image_t *)luaL_checkudata(L, 1, RAWIMG_META);
-	lua_pushnumber(L,img->width);
+	lua_pushinteger(L,img->width);
 	return 1;
 }
 
 static int rawimg_lua_get_height(lua_State *L) {
 	raw_image_t* img = (raw_image_t *)luaL_checkudata(L, 1, RAWIMG_META);
-	lua_pushnumber(L,img->height);
+	lua_pushinteger(L,img->height);
 	return 1;
 }
 
 static int rawimg_lua_get_bpp(lua_State *L) {
 	raw_image_t* img = (raw_image_t *)luaL_checkudata(L, 1, RAWIMG_META);
-	lua_pushnumber(L,img->fmt->bpp);
+	lua_pushinteger(L,img->fmt->bpp);
 	return 1;
 }
 
@@ -565,7 +565,7 @@ static int rawimg_lua_patch_pixels(lua_State *L) {
 			}
 		}
 	}
-	lua_pushnumber(L,count);
+	lua_pushinteger(L,count);
 	return 1;
 }
 
@@ -656,7 +656,7 @@ static int rawimg_lua_convert(lua_State *L) {
 	lua_pushvalue(L, 1); // lbuf, the value
 	lua_settable(L, -3); //set t[img]=lbuf
 	lua_pop(L,1); // done with t
-	
+
 	// TODO could optimize the conversions where bpp or bpp and endian don't change
 	int y;
 	for(y=0;y<img->height;y++) {
@@ -694,7 +694,7 @@ imgspec {
 		left:number
 		bottom:number
 		right:number
-	} 
+	}
 	color_matrix: -- TODO
 }
 
@@ -759,13 +759,13 @@ static int rawimg_lua_bind_lbuf(lua_State *L) {
 		img->active_bottom = img->height;
 	}
 	lua_pop(L,1); // pop off active area or nil
-	
+
 
 	img->fmt = rawimg_find_format(bpp,endian);
 	if(!img->fmt) {
 		return luaL_error(L,"unknown format");
 	}
-	
+
 	if(img->width % img->fmt->block_pixels != 0) {
 		return luaL_error(L,"width not a multiple of block size");
 	}
@@ -777,7 +777,7 @@ static int rawimg_lua_bind_lbuf(lua_State *L) {
 
 	luaL_getmetatable(L, RAWIMG_META);
 	lua_setmetatable(L, -2);
-	
+
 	// save a reference in the registry to keep lbuf from being collected until image goes away
 	lua_getfield(L,LUA_REGISTRYINDEX,RAWIMG_LIST);
 	lua_pushvalue(L, -2); // our user data, for use as key
@@ -825,12 +825,12 @@ int luaopen_rawimg(lua_State *L) {
 	luaL_newmetatable(L,RAWIMG_META);
 
 	/* use a table of methods for the __index method */
-//	luaL_register(L, NULL, rawimg_meta_methods);  
+//	luaL_register(L, NULL, rawimg_meta_methods);
 	lua_newtable(L);
-	luaL_register(L, NULL, rawimg_methods);  
+	luaL_register(L, NULL, rawimg_methods);
 	lua_setfield(L,-2,"__index");
 	lua_pop(L,1); // done with meta table
-	
+
 	// create a table to keep track of lbufs referenced by raw images
 	lua_newtable(L);
 	// metatable for above
@@ -841,6 +841,6 @@ int luaopen_rawimg(lua_State *L) {
 	lua_setfield(L,LUA_REGISTRYINDEX,RAWIMG_LIST);
 	lua_pop(L,1); // done with list table
 
-	luaL_register(L, "rawimg", rawimg_lib);  
+	luaL_register(L, "rawimg", rawimg_lib);
 	return 1;
 }

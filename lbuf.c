@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (C) 2010-2014 <reyalp (at) gmail dot com>
+ * Copyright (C) 2010-2022 <reyalp (at) gmail dot com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,8 +13,8 @@
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
+ *
  */
 #include <stdint.h>
 #include <string.h>
@@ -23,6 +23,7 @@
 #include <lualib.h>
 #include <lauxlib.h>
 #include "lbuf.h"
+#include "luautil.h"
 /*
 create a new lbuf and push it on the stack
 */
@@ -62,11 +63,37 @@ lBuf_t* lbuf_getlbuf(lua_State *L,int i) {
 }
 
 /*
+For use with with things like video frames, where same sized data repeatedly used
+
+check for lbuf at index
+if present and size == len, push onto stack
+otherwise, create a new lbuf of size
+returns lbuf->bytes (typically what you want, actual lbuf can be retrieved from stack)
+NOTE: lbufs with mismatched size are not re-allocated, will be gc'd in due course
+*/
+void *lbuf_reuse_or_create(lua_State *L, int index, unsigned len)
+{
+	lBuf_t *lb = lbuf_getlbuf(L,index);
+	if(lb && lb->len == len) {
+		lua_pushvalue(L,index); // copy it to stack top for return
+		return lb->bytes;
+	} else {
+		void *data=malloc(len);
+		if(!data) {
+			luaL_error(L,"malloc failed");
+			return NULL; // not reached
+		}
+		lbuf_create(L,data,len,LBUF_FL_FREE);
+		return data;
+	}
+}
+
+/*
 nbytes=buf:len()
 */
 static int lbuf_len(lua_State *L) {
 	lBuf_t *buf = (lBuf_t *)luaL_checkudata(L,1,LBUF_META);
-	lua_pushnumber(L,buf->len);
+	lua_pushinteger(L,buf->len);
 	return 1;
 }
 
@@ -159,7 +186,7 @@ static int lbuf_byte(lua_State *L) {
 	}
 	int i;
 	for(i=start;i<end;i++) {
-		lua_pushnumber(L,*(uint8_t *)(buf->bytes+i));
+		lua_pushinteger(L,*(uint8_t *)(buf->bytes+i));
 	}
 	return count;
 }
@@ -169,33 +196,38 @@ typedef void (*get_vals_fn)(lua_State *L,void *p);
 static void get_vals_int32(lua_State *L,void *p) {
 	int32_t v;
 	memcpy(&v,p,sizeof(v)); // p might not be aligned
-	lua_pushnumber(L,v);
+	lua_pushinteger(L,v);
 }
 
 static void get_vals_uint32(lua_State *L,void *p) {
 	uint32_t v;
 	memcpy(&v,p,sizeof(v)); // p might not be aligned
+// TODO may be out of range if LUA_INTEGER is 32 bits
+#if (LUA_MAXINTEGER > UINT32_MAX)
+	lua_pushinteger(L,v);
+#else
 	lua_pushnumber(L,v);
+#endif
 }
 
 static void get_vals_int16(lua_State *L,void *p) {
 	int16_t v;
 	memcpy(&v,p,sizeof(v)); // p might not be aligned
-	lua_pushnumber(L,v);
+	lua_pushinteger(L,v);
 }
 
 static void get_vals_uint16(lua_State *L,void *p) {
 	uint16_t v;
 	memcpy(&v,p,sizeof(v)); // p might not be aligned
-	lua_pushnumber(L,v);
+	lua_pushinteger(L,v);
 }
 
 static void get_vals_int8(lua_State *L,void *p) {
-	lua_pushnumber(L,*(int8_t *)p);
+	lua_pushinteger(L,*(int8_t *)p);
 }
 
 static void get_vals_uint8(lua_State *L,void *p) {
-	lua_pushnumber(L,*(uint8_t*)p);
+	lua_pushinteger(L,*(uint8_t*)p);
 }
 
 /*
@@ -321,29 +353,29 @@ static int set_vals(lua_State *L,unsigned size,set_vals_fn f) {
 }
 
 static int lbuf_set_i32(lua_State *L) {
-	lua_pushnumber(L,set_vals(L,4,set_vals_int32));
+	lua_pushinteger(L,set_vals(L,4,set_vals_int32));
 	return 1;
 }
 static int lbuf_set_u32(lua_State *L) {
-	lua_pushnumber(L,set_vals(L,4,set_vals_uint32));
+	lua_pushinteger(L,set_vals(L,4,set_vals_uint32));
 	return 1;
 }
 
 static int lbuf_set_i16(lua_State *L) {
-	lua_pushnumber(L,set_vals(L,2,set_vals_int16));
+	lua_pushinteger(L,set_vals(L,2,set_vals_int16));
 	return 1;
 }
 static int lbuf_set_u16(lua_State *L) {
-	lua_pushnumber(L,set_vals(L,2,set_vals_uint16));
+	lua_pushinteger(L,set_vals(L,2,set_vals_uint16));
 	return 1;
 }
 
 static int lbuf_set_i8(lua_State *L) {
-	lua_pushnumber(L,set_vals(L,1,set_vals_int8));
+	lua_pushinteger(L,set_vals(L,1,set_vals_int8));
 	return 1;
 }
 static int lbuf_set_u8(lua_State *L) {
-	lua_pushnumber(L,set_vals(L,1,set_vals_uint8));
+	lua_pushinteger(L,set_vals(L,1,set_vals_uint8));
 	return 1;
 }
 
@@ -462,7 +494,7 @@ static int lbuf_fill(lua_State *L) {
 
 	// zero length fill or outside end, done
 	if(fill_len == 0 || offset >= buf->len) {
-		lua_pushnumber(L,0);
+		lua_pushinteger(L,0);
 		return 1;
 	}
 	unsigned count = luaL_optnumber(L,4,buf->len/fill_len + 1); // this will be clamped later, guaranteed to fill the buffer
@@ -477,7 +509,7 @@ static int lbuf_fill(lua_State *L) {
 	}
 	// no bytes to fill
 	if(fill_bytes == 0) {
-		lua_pushnumber(L,0);
+		lua_pushinteger(L,0);
 		return 1;
 	}
 	char *p = buf->bytes + offset;
@@ -495,7 +527,7 @@ static int lbuf_fill(lua_State *L) {
 			memcpy(p,fill_val,rest);
 		}
 	}
-	lua_pushnumber(L,fill_bytes);
+	lua_pushinteger(L,fill_bytes);
 	return 1;
 }
 
@@ -563,8 +595,18 @@ static int lbuf_new(lua_State *L) {
 	return 1;
 }
 
+/*
+bool=lbuf.is_lbuf(value)
+*/
+static int lbuf_is_lbuf(lua_State *L) {
+	lBuf_t *buf = lbuf_getlbuf(L,1);
+	lua_pushboolean(L,buf != NULL);
+	return 1;
+}
+
 static const luaL_Reg lbuf_funcs[] = {
   {"new", lbuf_new},
+  {"is_lbuf", lbuf_is_lbuf},
   {NULL, NULL}
 };
 
@@ -577,7 +619,7 @@ static int lbuf_gc(lua_State *L) {
 		// ensure anything on the C side sees this as empty before final gc
 		buf->len=0;
 		buf->bytes=NULL;
-	}	
+	}
 	return 0;
 }
 
@@ -588,16 +630,16 @@ static const luaL_Reg lbuf_meta_methods[] = {
 
 int luaopen_lbuf(lua_State *L) {
 	luaL_newmetatable(L,LBUF_META);
-	luaL_register(L, NULL, lbuf_meta_methods);  
+	luaL_register(L, NULL, lbuf_meta_methods);
 	/* use a table of methods for the __index method */
 	lua_newtable(L);
-	luaL_register(L, NULL, lbuf_methods);  
+	luaL_register(L, NULL, lbuf_methods);
 	lua_setfield(L,-2,"__index");
 	lua_pop(L,2);
 
 	/* global lib*/
 	lua_newtable(L);
-	luaL_register(L, "lbuf", lbuf_methods);  
-	luaL_register(L, NULL, lbuf_funcs);  
+	luaL_register(L, "lbuf", lbuf_methods);
+	luaL_register(L, NULL, lbuf_funcs);
 	return 1;
 }

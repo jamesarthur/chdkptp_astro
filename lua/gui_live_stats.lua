@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2014 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2019 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -24,26 +24,26 @@ local counter_proto = {
 function counter_proto.new(init)
 	local t=util.extend_table({},counter_proto)
 	util.extend_table(t,init)
-	t.t_start=ustime.new()
+	t.t_start=ticktime.get()
 	t:reset()
 	return t
 end
 function counter_proto:reset()
 	self.times={}
-	self.r_times={} -- repeat times = time between starts 
+	self.r_times={} -- repeat times = time between starts
 	self.count=0
 end
 function counter_proto:start()
 	if self.count > 0 then
-		self.r_times[self.cur_index] = self.t_start:diffms()
+		self.r_times[self.cur_index] = ticktime.elapsedms(self.t_start)
 	end
-	self.t_start:get()
+	self.t_start = ticktime.get()
 	self.count = self.count + 1
 	self.cur_index = math.floor(self.count%self.hist_size)
 end
 
 function counter_proto:finish()
-	self.times[self.cur_index] = self.t_start:diffms()
+	self.times[self.cur_index] = ticktime.elapsedms(self.t_start)
 end
 
 function counter_proto:last_time()
@@ -128,7 +128,10 @@ function stats:end_xfer(bytes)
 end
 
 function stats:get_last_total_ms()
-	return self.frames:last_time() + self.xfer:last_time() 
+	if self.frames.count == 0 or self.xfer.count == 0 then
+		return 0
+	end
+	return self.frames:last_time() + self.xfer:last_time()
 end
 
 function stats:get()
@@ -139,7 +142,7 @@ function stats:get()
 	else
 		run = "no"
 	end
-	
+
 	local fps_avg = 0
 	local frame_time = 0
 	local tp_bps_avg = 0
@@ -166,11 +169,11 @@ function stats:get()
 	return string.format(
 [[Running: %s
 FPS: %0.2f
-Frame last ms: %d
-T/P kb/s: %d
-Xfer last ms: %d
-Xfer kb: %d
-Xfer kb/s: %d]],
+Frame last ms: %.1f
+T/P kb/s: %.1f
+Xfer last ms: %.1f
+Xfer kb: %.1f
+Xfer kb/s: %.1f]],
 		run,
 		fps_avg,
 		frame_time,

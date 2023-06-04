@@ -53,14 +53,14 @@ typedef struct {
 
 	int connection_id;
 	char cam_guid[16];
-	// TODO 
+	// TODO
 	char host[LIBUSB_PATH_MAX];
 	char port[LIBUSB_PATH_MAX];
 } PTP_TCP;
 
 typedef struct {
 	// common connection state
-	int con_type; 
+	int con_type;
 	int script_id;
 	int timeout;
 	int connected; // soft check without actually trying to access connection

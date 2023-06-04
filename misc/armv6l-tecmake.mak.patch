@@ -1,0 +1,12 @@
+--- tecmake.mak.orig	2016-05-17 06:00:48.000000000 -0700
++++ tecmake.mak	2016-07-10 22:15:34.118794981 -0700
+@@ -72,6 +72,9 @@
+   ifeq ($(TEC_SYSARCH), armv7l)
+     TEC_SYSARCH:=arm
+   endif
++  ifeq ($(TEC_SYSARCH), armv6l)
++    TEC_SYSARCH:=arm
++  endif
+   
+   # Compose
+   TEC_SYSRELEASE:=$(TEC_SYSVERSION).$(TEC_SYSMINOR)

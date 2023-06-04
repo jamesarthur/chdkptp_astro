@@ -1,43 +1,219 @@
 Binaries for some platforms are available from the assembla files area
 https://www.assembla.com/spaces/chdkptp/documents
 
+*NOTE*: Google chrome may block the windows binary zip as malware, because
+Google has decided that any unknown, unsigned exe *is* malware. If you want
+to use chdkptp, view all downloads and "recover" the file (ignoring the
+bullshit message that program "will harm your computer") or use a different
+browser. Or if you don't trust me (and why should you?) build from source.
+
 There is no installer, just unzip the file wherever you want.
 
 h2. Windows
 
-* You must install a libusb driver to connect to cameras. Instructions are
-  available on the CHDK wiki at
-  http://chdk.wikia.com/wiki/PTP_Extension#LibUSB_Driver_for_Windows
-* After the driver is configured, simply run the executable. If you double
-  click on the .exe, the GUI will start. If you want to start the cli,
-  run chdkptp -i
+You must install a libusb-win32 driver to connect to cameras.
+
+Zadig is the recommended way to install the libusb-win32 driver.
+To install using this tool:
+
+* Download the appropriate file for your OS from http://zadig.akeo.ie/
+* Connect the camera
+** If you have never connected the camera before, wait for windows to install
+   the default driver.
+* Run the zadig program
+* Select "List all devices" in the options menu
+* Select your camera in the dropdown. It will probably appear as "Canon Digital Camera".
+** If you have multiple Canon cameras, make sure only one is connected and powered on.
+** You can edit the name to allow identifying the driver later.
+** Be sure you have the camera selected. If you select the wrong device, the
+   device you selected may become unusable until you remove the driver. The
+   first item in the Driver link should be something referring to Mtp,
+   (e.g. <code>WUDFWpdMtp</code> on windows 10.) The first part of the USB ID will be 04A9
+   for a Canon camera, and the second part will be the PID of your camera.
+* Select libusb-win32 in the driver option.
+* click "Reinstall driver"
+* Restart the camera before attempting to access it with a CHDK client. There
+  is no need to restart your PC.
+
+See http://chdk.wikia.com/wiki/PTP_Extension for additional information
+
+After the driver is configured, simply run the executable. If you double click
+on the .exe, the GUI will start. If you want to start the cli, run chdkptp -i
+
+*NOTE*: Installing the libusb driver normally prevents standard windows
+software from connecting to the camera. To restore normal windows access, use
+Zadig or windows device manager to remove the libusb driver.
 
 h2. Linux
 
 If a binary for your particular flavor of Linux is not available, you must build
 from source. Some instructions can be found in README.TXT
 
-To use the GUI in the raspberry pi package, you must also download the raspberry
-pi library package and set your LD_LIBRARY_PATH appropriately.
+The Linux binary packages include executable files with and without GUI support.
+Use the included chdkptp.sh to start the CLI-only build, or chdkptp_gui.sh to
+start the GUI enabled executable. See README-LINUX-BINARIES.TXT for more
+information about these builds.
+
+These scripts should set all necessary environment variables.
+
+The Linux packages include a minimal set of IUP and CD libraries for the GUI
+executables.
+
+If you see a message referencing something like "libusb-0.1.so", you probably
+need to install the libusb-0.1 compatibility package, which is usually called
+something like libusb-0.1. This is generally required on recent Ubuntu based
+distros.
 
 h3. Environment
 
-To allow chdkptp to locate it's Lua files and libraries, it is necessary to set
-some environment variables. chdkptp-sample.sh in the zip provides an example.
-* set CHDKPTP_DIR to the path where you unzipped the files (the directory
-  containing the chdkptp binary)
+On Linux, it is necessary to set some environment variables to allow chdkptp
+to find the required lua files and shared libraries. This should be done
+automatically by the scripts in the binary packages, but if you build
+chdkptp yourself or wish to use different libraries, you may need to
+adjust the values.
+
+chdkptp.sh and chdkppt_gui.sh in the zip provide an examples.
+* CHDKPTP_DIR should be set to the path where the chdkptp binary is located
 * If you are using a GUI build and the IUP and CD libraries are not on your
-  default LD_LIBRARY_PATH, add them to LD_LIBRARY_PATH. 
+  default LD_LIBRARY_PATH, add them to LD_LIBRARY_PATH.
+* If you have both GUI and non-GUI executables, set CHDKPTP_EXE
+  to the desired executable.
 
-h3. Interactions with default software 
+h3. Interactions with default software
 
-On Linux, default camera software may connect to the camera automatically. The
-details will depend on the Linux distribution and configuration. Some
-discussion can be found at:
+On Linux, default camera software may connect to the camera automatically.
+The details will depend on the Linux distribution and configuration, but a
+common symptom is that the camera screen will go black when the camera is
+plugged in, and chdkptp will be unable to switch the camera to record mode.
+Note that this problem involves a state change on the camera, so once the
+camera has entered the black screen state, chdkptp will be unable to switch
+to record mode (with CHDK prior to 1.6), or encounter problems after
+attempting, to switch (some models with chdk 1.6 or later) even if software
+that triggered the change has been closed or the camera has been "unmounted"
+in the UI.
+
+CHDK 1.6 and later attempt to "unlock" the camera when it is in this state.
+This can eliminate the need for the udev workarounds described below, but
+may fail on some cameras or have other side effects. With earlier versions
+of CHDK or to re-enable the screen without switching to rec, you can trigger
+the same unlock using the chdkptp unlock command (r1162 and later) or using
+ =post_levent_to_ui(4484) for DryOS cameras or =post_levent_to_ui(4420) for
+VxWorks cameras.
+
+Installing a Linux distro without a GUI desktop (headless) often avoids these
+issues, though may result in the permission issues described in the following
+section. For Raspberry PI, you can get a headless install using the Raspbian
+"lite" image.
+
+In general, most modern distros use
+https://www.kernel.org/pub/linux/utils/kernel/hotplug/udev/udev.html
+to handle hot plugged USB devices. For PTP capable devices this will often
+invoke some kind of auto mount, which will often put the camera in the state
+described above where it cannot be fully controlled by chdkptp.
+
+Some general information on writing udev rules can be found at
+http://www.reactivated.net/writing_udev_rules.html
+
+On Ubuntu 22.04 with the default desktop, the following appears to prevent
+gphoto from automatically accessing the camera. The general approach should
+work on most other distros, but details may vary so please treat this as a
+representative example. Everything below needs to be done as root.
+
+Create a file in /etc/udev/rules.d named 99-ptp-local.rules or similar. The name should
+start with a high number like 99, the rest is up to you
+
+To prevent all Canon PTP devices from being accessed by gphoto, add the content
+
+ ENV{ID_USB_INTERFACES}=="", IMPORT{builtin}="usb_id"
+ SUBSYSTEMS=="usb", ENV{ID_USB_INTERFACES}=="*:060101:*", ATTR{idVendor}=="04a9" ENV{ID_GPHOTO2}="", ENV{GPHOTO2_DRIVER}=""
+
+To block gphoto for only a specific camera, you can use
+
+ ENV{ID_USB_INTERFACES}=="", IMPORT{builtin}="usb_id"
+ SUBSYSTEMS=="usb", ENV{ID_USB_INTERFACES}=="*:060101:*", ATTR{idVendor}=="04a9", ATTR{idProduct}=="HHHH" ENV{ID_GPHOTO2}="", ENV{GPHOTO2_DRIVER}=""
+
+where HHHH is the USB product ID of the camera in hexadecimal. Product IDs can
+be found in dmesg output. A list of CHDK product IDs is also maintained at
+https://chdk.fandom.com/wiki/P-ID_(Table)
+
+h4. Alternate brute force method
+
+The 99-ptp-local.rules approach described above is preferred, since it should
+minimize side effects. However the following is also known to work
+
+For Ubuntu (and likely other Debian based) distros
+
+Copy the distro provided udev files to the corresponding directories in etc.
+
+ cp /lib/udev/rules.d/60-libgphoto2-6.rules /etc/udev/rules.d
+ cp /lib/udev/hwdb.d/20-libgphoto2-6.hwdb /etc/udev/hwdb.d
+
+edit /etc/udev/rules.d/60-libgphoto2-6.rules, immediately below the line
+
+ENV{ID_USB_INTERFACES}=="", IMPORT{builtin}="usb_id"
+
+add
+
+ENV{ID_USB_INTERFACES}=="*:060101:*", ATTR{idVendor}=="04a9", MODE="0664", GROUP="plugdev", GOTO="libgphoto2_rules_end"
+
+edit /etc/udev/hwdb.d/20-libgphoto2-6.hwdb and remove or comment out the
+entries for the Canon cameras you want to use with chdkptp (or all of them)
+
+run
+
+ udevadm hwdb --update
+
+Both the rule and hwdb need to be updated, because the rules are only applied to
+cameras not specifically mentioned in hwdb. If a camera isn't mentioned in hwdb,
+the rule change is sufficient, but the distro vendor might add it to the db later.
+The udevadm command must be run to make the system aware of the hwdb change. The
+rule change appears to take effect immediately.
+
+On Fedora 27-33, the following appears to work
+
+ cp /lib/udev/rules.d/40-libgphoto2.rules /etc/udev/rules.d
+
+edit /etc/udev/rules.d/40-libgphoto2.rules, immediately below the line
+
+ENV{ID_USB_INTERFACES}=="", IMPORT{program}="usb_id --export %%p"
+
+Add
+
+ENV{ID_USB_INTERFACES}=="*:060101:*", ATTRS{idVendor}=="04a9", MODE="0664", GOTO="libgphoto2_rules_end"
+
+There appears to be no gphoto hwdb file on this distro.
+
+This is not the only possible solution, and it may or may not apply to other
+distros. For example, on some distros, killing gvfs-gphoto2-volume-monitor
+is sufficient to prevent the default software from accessing the camera for
+the duration of a desktop session.
+
+*Note*: Copying the udev files (rather than editing in lib) ensures they will
+not be replaced by distro updates, but also will prevent any subsequent distro
+updates to those files from having any effect. It may be be possible to write
+more selective udev rules that only override the minimum required.
+
+Additional discussion can be found in the following forum threads:
+http://chdk.setepontos.com/index.php?topic=10664.msg115401#msg115401
 http://chdk.setepontos.com/index.php?topic=6231.msg100671#msg100671
 
 h3. Permissions issues
 
 In some configurations, the camera will only be accessible to the root user by
-default. Some discussion can be found at: 
+default. This often occurs when the no default camera software is installed.
+udev is generally used to control permissions on hot plugged devices.
+
+On systems which do not otherwise have rules for PTP devices in udev, something
+like the following as /etc/udev/rules.d/99-chdkptp.rules can be used to set the
+device permissions for Canon PTP cameras. Adjust the mode and group to taste.
+
+ENV{ID_USB_INTERFACES}=="", IMPORT{builtin}="usb_id"
+ENV{ID_USB_INTERFACES}=="*:060101:*", ATTR{idVendor}=="04a9", MODE="0664", GROUP="plugdev"
+
+*NOTE*: The above should mostly only be needed where "Interactions with default
+software" section above *does not* apply, but the MODE and GROUP parts can be combined
+with the 99-ptp-local.rules solution described above if desired.
+
+Some discussion can be found at:
 http://chdk.setepontos.com/index.php?topic=6231.msg89252#msg89252
+

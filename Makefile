@@ -15,13 +15,17 @@ SVNREV=0
 endif
 
 ifeq ($(OSTYPE),Windows)
-SYS_LIBS=ws2_32 kernel32
+SYS_LIBS=ws2_32 kernel32 winmm
 IUP_SYS_LIBS=comctl32 ole32 gdi32 comdlg32 uuid
 endif
 
 ifeq ("$(PTPIP_SUPPORT)","1")
 CFLAGS +=-DCHDKPTP_PTPIP=1
 PTPIP_SRCS=sockutil.c
+# some gcc versions require for __atribute__((packed)) to work
+ifeq ($(OSTYPE),Windows)
+CFLAGS +=-mno-ms-bitfields
+endif
 # ws2_32 already included
 endif
 # PTPIP
@@ -61,7 +65,7 @@ endif
 
 ifeq ("$(IUP_SUPPORT)","1")
 ifdef IUP_LIB_DIR
-LIB_PATHS+=-L$(IUP_LIB_DIR)
+LIB_PATHS+=-L$(IUP_LIB_DIR) -L$(IUP_LIB_DIR)/Lua$(LUA_SFX)
 endif
 ifdef IUP_INCLUDE_DIR
 INC_PATHS+=-I$(IUP_INCLUDE_DIR)
@@ -72,7 +76,7 @@ SYS_LIBS+=$(IUP_SYS_LIBS)
 # CD only usable with IUP
 ifeq ("$(CD_SUPPORT)","1")
 ifdef CD_LIB_DIR
-LIB_PATHS+=-L$(CD_LIB_DIR)
+LIB_PATHS+=-L$(CD_LIB_DIR) -L$(CD_LIB_DIR)/Lua$(LUA_SFX)
 endif
 ifdef CD_INCLUDE_DIR
 INC_PATHS+=-I$(CD_INCLUDE_DIR)
@@ -99,18 +103,40 @@ endif
 # iup
 endif
 
-# needed for linking static lua lib on linux, should be harmless if dynamic linking
+# GTK GUI
+ifeq ("$(GTK_SUPPORT)","1")
+CFLAGS+=-DCHDKPTP_GTK=1
+endif
+
 ifneq ($(OSTYPE),Windows)
+# needed for linking static lua lib on linux, should be harmless if dynamic linking
 LINK_LIBS+=m dl
+# need to allow chdkptp executable to load C modules
+ifeq ($(OSTYPE),Linux)
+LDFLAGS+=-Wl,-E
+endif
+ifeq ($(OSTYPE),Darwin)
+LDFLAGS+=-Wl,-undefined -Wl,dynamic_lookup
+endif
 endif
 
 INC_PATHS+=-I$(CHDK_SRC_DIR)
 
 CFLAGS+=$(INC_PATHS) -DCHDKPTP_BUILD_NUM=$(SVNREV) -DCHDKPTP_REL_DESC="\"alpha\""
 
-LDFLAGS+=$(LIB_PATHS) $(patsubst %,-l%,$(LINK_LIBS) $(SYS_LIBS)) 
+L_STATIC_START=-Wl,-Bstatic
+L_STATIC_END=-Wl,-Bdynamic
+LINK_LIBS_ALL:=$(patsubst %,-l%,$(LINK_LIBS) $(SYS_LIBS))
+LINK_LIBS_ALL:=$(patsubst -lSTATIC_START,$(L_STATIC_START),$(LINK_LIBS_ALL))
+LINK_LIBS_ALL:=$(patsubst -lSTATIC_END,$(L_STATIC_END),$(LINK_LIBS_ALL))
+
+LDFLAGS+=$(LIB_PATHS) $(LINK_LIBS_ALL)
 
 SUBDIRS=lfs
+
+ifeq ($(LUASIGNAL_SUPPORT),1)
+SUBDIRS+=lua-signal
+endif
 
 CHDKPTP_EXE=chdkptp$(EXE_EXTRA)$(EXE)
 
@@ -118,7 +144,7 @@ EXES=$(CHDKPTP_EXE)
 
 all: $(EXES)
 
-SRCS=properties.c ptp.c chdkptp.c lbuf.c liveimg.c rawimg.c luautil.c $(PTPIP_SRCS)
+SRCS=ptpcodes.c ptp.c chdkptp.c lbuf.c liveimg.c rawimg.c luautil.c $(PTPIP_SRCS)
 OBJS=$(SRCS:.c=.o)
 
 $(CHDKPTP_EXE): $(OBJS)

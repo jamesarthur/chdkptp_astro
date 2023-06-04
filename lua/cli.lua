@@ -1,5 +1,5 @@
 --[[
- Copyright (C) 2010-2014 <reyalp (at) gmail dot com>
+ Copyright (C) 2010-2022 <reyalp (at) gmail dot com>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2 as
@@ -11,8 +11,7 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  with chdkptp. If not, see <http://www.gnu.org/licenses/>.
 --]]
 
 local cli = {
@@ -20,6 +19,7 @@ local cli = {
 	names={},
 	finished = false,
 	source_level = 0, -- number of nested execfile calls
+	last_status = true, -- success or failure of last execute() call
 }
 --[[
 info printf - message to be printed at normal verbosity
@@ -27,130 +27,7 @@ info printf - message to be printed at normal verbosity
 cli.infomsg = util.make_msgf( function() return prefs.cli_verbose end, 1)
 cli.dbgmsg = util.make_msgf( function() return prefs.cli_verbose end, 2)
 
---[[
-get command args of the form -a[=value] -bar[=value] .. [wordarg1] [wordarg2] [wordarg...]
---]]
-local argparser = { }
-cli.argparser = argparser
-
--- trim leading spaces
-function argparser:trimspace(str)
-	local s, e = string.find(str,'^[%c%s]*')
-	return string.sub(str,e+1)
-end
---[[
-get a 'word' argument, either a sequence of non-white space characters, or a quoted string
-inside " \ is treated as an escape character
-return word, end position on success or false, error message
-]]
-function argparser:get_word(str)
-	local result = ''
-	local esc = false
-	local qchar = false
-	local pos = 1
-	while pos <= string.len(str) do
-		local c = string.sub(str,pos,pos)
-		-- in escape, append next character unconditionally
-		if esc then
-			result = result .. c
-			esc = false
-		-- inside double quote, start escape and discard backslash
-		elseif qchar == '"' and c == '\\' then
-			esc = true
-		-- character is the current quote char, close quote and discard
-		elseif c == qchar then
-			qchar = false
-		-- not hit a space and not inside a quote, end
-		elseif not qchar and string.match(c,"[%c%s]") then
-			break
-		-- hit a quote and not inside a quote, enter quote and discard
-		elseif not qchar and c == '"' or c == "'" then
-			qchar = c
-		-- anything else, copy
-		else
-			result = result .. c
-		end
-		pos = pos + 1
-	end
-	if esc then
-		return false,"unexpected \\"
-	end
-	if qchar then
-		return false,"unclosed " .. qchar
-	end
-	return result,pos
-end
-
-function argparser:parse_words(str)
-	local words={}
-	str = self:trimspace(str)
-	while string.len(str) > 0 do
-		local w,pos = self:get_word(str)
-		if not w then
-			return false,pos -- pos is error string
-		end
-		table.insert(words,w)
-		str = string.sub(str,pos)
-		str = self:trimspace(str)
-	end
-	return words
-end
-
---[[
-parse a command string into switches and word arguments
-switches are in the form -swname[=value]
-word arguments are anything else
-any portion of the string may be quoted with '' or ""
-inside "", \ is treated as an escape
-on success returns table with args as array elements and switches as named elements
-on failure returns false, error
-defs defines the valid switches and their default values. Can also define default values of numeric args
-TODO enforce switch values, number of args, integrate with help
-]]
-function argparser:parse(str)
-	-- default values
-	local results=util.extend_table({},self.defs)
-	local words,errmsg=self:parse_words(str)
-	if not words then
-		return false,errmsg
-	end
-	for i, w in ipairs(words) do
-		-- look for -name
-		local s,e,swname=string.find(w,'^-(%a[%w_-]*)')
-		-- found a switch
-		if s then		
-			if type(self.defs[swname]) == 'nil' then
-				return false,'unknown switch '..swname
-			end
-			local swval
-			-- no value
-			if e == string.len(w) then
-				swval = true
-			elseif string.sub(w,e+1,e+1) == '=' then
-				-- note, may be empty string but that's ok
-				swval = string.sub(w,e+2)
-			else
-				return false,"invalid switch value "..string.sub(w,e+1)
-			end
-			results[swname]=swval
-		else
-			table.insert(results,w)
-		end
-	end
-	return results
-end
-
--- a default for comands that want the raw string
-argparser.nop = {
-	parse =function(self,str)
-		return str
-	end
-}
-
-function argparser.create(defs)
-	local r={ defs=defs }
-	return util.mt_inherit(r,argparser)
-end
+local argparser = require'argparser'
 
 cli.cmd_proto = {
 	get_help = function(self)
@@ -187,7 +64,7 @@ function cli:add_commands(cmds)
 			cmd.arghelp = ''
 		end
 		if not cmd.args then
-			cmd.args = argparser.nop
+			cmd.args = argparser.none
 		end
 		for _,name in ipairs(cmd.names) do
 			if self.names[name] then
@@ -232,10 +109,12 @@ function cli:execute(line)
 			local status,msg
 			args,msg = self.names[cmd].args:parse(args)
 			if not args then
+				-- parse failed
+				self.last_status = false
 				return false,msg
 			end
 			local cstatus
-			local t0=ustime.new()
+			local t0=ticktime.get()
 			con:reset_counters()
 			if self.names[cmd].noxpcall then
 				cstatus = true
@@ -247,7 +126,7 @@ function cli:execute(line)
 					end,
 					errutil.format)
 			end
-			local tdiff = ustime.diff(t0)/1000000;
+			local tdiff = ticktime.elapsed(t0)
 			if prefs.cli_time then
 				printf("time %.4f\n",tdiff)
 			end
@@ -259,35 +138,43 @@ function cli:execute(line)
 					wbps = "-"
 				else
 					-- note these are based on total command execution time, not just transfer
-					rbps = string.format("%d",xferstats.read/tdiff)
-					wbps = string.format("%d",xferstats.write/tdiff)
+					rbps = string.format("%.1f",xferstats.read/tdiff)
+					wbps = string.format("%.1f",xferstats.write/tdiff)
 				end
 				printf("r %d %s/s w %d %s/s\n",xferstats.read,rbps,xferstats.write,wbps)
 			end
 			if not cstatus then
+				-- lua error() running command
+				self.last_status = false
 				return false,status
 			end
 			if not status and not msg then
 				msg=cmd .. " failed"
 			end
+			-- last_status from command return status, unless flagged to skip (for quit, comments etc)
+			if not self.names[cmd].no_status then
+				self.last_status = status
+			end
 			return status,msg
-		else 
+		else
+			self.last_status = false
 			return false,string.format("unknown command '%s'\n",cmd)
 		end
 	elseif string.find(line,'[^%c%s]') then
+		self.last_status = false
 		return false, string.format("bad input '%s'\n",line)
 	end
-	-- blank input is OK
+	-- blank input is OK, last_status unchanged
 	return true,""
 end
 
-function cli:execfile(filename) 
+function cli:execfile(filename)
 	if cli.source_level == prefs.cli_source_max then
 		return false, 'too many nested source calls'
 	end
 	cli.source_level = cli.source_level + 1
 	local fh, err = io.open(filename,'rb')
-	if not fh then 
+	if not fh then
 		return false, 'failed to open file: '..tostring(err)
 	end
 	-- empty file is OK
@@ -311,7 +198,7 @@ function cli:execfile(filename)
 	return true
 end
 
-function cli:print_status(status,msg) 
+function cli:print_status(status,msg)
 	if not status then
 		errf("%s\n",tostring(msg))
 	elseif msg then
@@ -348,7 +235,10 @@ function cli:run()
 		if line:len() > 0 then
 			cli.add_history(line)
 		end
-		self:print_status(self:execute(line))
+		local status=self:print_status(self:execute(line))
+		if prefs.cli_error_exit and not status then
+			self.finished = true
+		end
 		if self.finished then
 			break
 		end
@@ -360,6 +250,8 @@ end
 function cli:connection_status_change()
 	if gui then
 		gui.update_connection_status()
+	elseif con:is_connected() then -- handled in GUI if present
+		con:do_on_connect_actions()
 	end
 end
 
@@ -451,7 +343,26 @@ function cli:get_shoot_common_opts(args)
 		opts.nd = val
 	end
 	if args.sd then
-		local sd,units=string.match(args.sd,'(%d+)(%a*)')
+		local sd,units=string.match(args.sd,'^(-?%d*%.?%d+)(%a*)$')
+
+		if not sd then
+			if string.upper(args.sd) == "INF" then
+				sd=-1
+				units="mm"
+			else
+				return false,string.format('invalid sd %s',tostring(args.sd))
+			end
+		end
+
+		sd = tonumber(sd)
+		if not sd then
+			return false,string.format('invalid sd %s',tostring(args.sd))
+		end
+
+		if sd < 0 then
+			sd = -1
+			units="mm"
+		end
 
 		local convert={
 			mm=1,
@@ -468,13 +379,45 @@ function cli:get_shoot_common_opts(args)
 		end
 		opts.sd = util.round(sd*convert[units])
 	end
+	if args.sdmode then
+		if not args.sd then
+			return false,'sdmode requires sd'
+		end
+		if type(args.sdmode) ~= 'string' then
+			return false,'sdmode requires a value'
+		end
+		args.sdmode=string.upper(args.sdmode)
+		if not util.in_table({'AF','AFL','MF','NONE'},args.sdmode) then
+			return false,string.format('invalid sd mode %s',tostring(args.sdmode))
+		end
+		if args.sdmode == 'NONE' then
+			opts.sdprefmode=nil
+			opts.sdnoenable=true
+		else
+			opts.sdprefmode=args.sdmode
+		end
+	end
 
 	-- hack for CHDK override bug that ignores APEX 0
 	-- only used for CHDK 1.1 (API 2.4 and earlier)
 	if  opts.tv == 0 and not con:is_ver_compatible(2,5) then
 		opts.tv = 1
 	end
+	-- shot sequence - ensure numeric
+	if args.seq then
+		args.seq = tonumber(args.seq)
+		if not args.seq then
+			return false,'invalid seq'
+		end
+	end
 	return opts
+end
+
+function cli:get_luatext_arg(arg)
+	if not arg.input then
+		return arg.text
+	end
+	return fsutil.readfile(arg.input,{bin=true})
 end
 
 --[[
@@ -491,7 +434,7 @@ function cli.list_dev_single(desc)
 		lcon:connect()
 	else
 		-- existing con wrapped in new object won't have info set
-		lcon.update_connection_info(lcon)
+		lcon:update_connection_info()
 	end
 
 	if con_status == '+' and lcon._con == con._con then
@@ -513,50 +456,51 @@ end
 --[[
 helper function to setup lvdumpimg files
 ]]
-function cli.init_lvdumpimg_file_opts(which,args,subst)
-	local opts={}
-	local pipeopt, ext, write_fn
-	if which == 'vp' then
-		pipeopt = 'pipevp'
-		ext='ppm'
-		write_fn = chdku.live_dump_vp_pbm
-	elseif which == 'bm' then
-		pipeopt = 'pipebm'
-		ext='pam'
-		write_fn = chdku.live_dump_bm_pam
-	else
-		errlib.throw{etype='bad_arg',msg='invalid type '..tostring(which)}
+function cli.init_lvdumpimg_file_opts(which,args)
+	local ospec=args[which]
+	if not ospec then
+		return
 	end
+
+
 	local filespec
-	if args[which] == true then
-		if args[pipeopt] then
-			errlib.throw{etype='bad_arg',msg='must specify command with '..tostring(pipeopt)}
-		end
-		filespec = which..'_${time,%014.3f}.'..ext
+	-- if ospec is true, want dumpimg to use defaults
+	if type(ospec) == 'string' then
+		filespec=ospec
+	end
+	local pipe = args['pipe'..which]
+	if pipe == true then
+		pipe = 'frame'
+	end
+	local format
+	if which == 'bm' then
+		format = 'pam'
 	else
-		filespec = args[which]
+		format = args.vpfmt
 	end
-
-	if args[pipeopt] then
-		opts.pipe = true
-		if args[pipeopt] == 'oneproc' then
-			opts.pipe_oneproc = true
+	local opts = {
+		pipe=pipe,
+		filespec=filespec,
+		format=format,
+	}
+	if not args.quiet then
+		local frame_complete_fn
+		local file_complete_fn
+		frame_complete_fn = function(self)
+			cli.infomsg('%s frame %d\n',self.name,self.state.frame_count)
 		end
-	end
-
-	opts.write = function(frame)
-		if not args.nosubst then
-			opts.filename = subst:run(filespec)
-		else
-			opts.filename = filespec
-		end
-		write_fn(frame,opts)
-		if not args.quiet then
-			if opts.pipe_oneproc then
-				cli.infomsg('frame %d\n',subst.state.frame)
-			else
-				cli.infomsg('%s\n',opts.filename)
+		file_complete_fn = function(self)
+			-- pipe combine doesn't have a filename
+			if self.filename then
+				cli.infomsg('%s\n',self.filename)
 			end
+		end
+		if pipe == 'oneproc' then
+			opts.on_frame_complete = frame_complete_fn
+		elseif pipe == 'frame' then
+			opts.on_frame_complete = file_complete_fn
+		else
+			opts.on_file_complete = file_complete_fn
 		end
 	end
 
@@ -611,7 +555,7 @@ cli:add_commands{
 		help_detail=[[
  help -v gives full help on all commands, otherwise as summary is printed
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			cmd = args[1]
 			if cmd and cli.names[cmd] then
 				return true, cli.names[cmd]:get_help_detail()
@@ -633,26 +577,33 @@ cli:add_commands{
 	{
 		names={'#'},
 		help='comment',
-		func=function(self,args) 
+		args=argparser.nop,
+		no_status=true,
+		func=function(self,args)
 			return true
 		end,
 	},
 	{
 		names={'exec','!'},
 		help='execute local lua',
-		arghelp='<lua code>',
+		arghelp='<lua code> | < <filename>',
+		args=argparser_text.create{ },
 		help_detail=[[
- Execute lua in chdkptp. 
+ Execute lua in chdkptp.
  The global variable con accesses the current CLI connection.
  Return values are printed in the console.
 ]],
-		func=function(self,args) 
-			local f,r = loadstring(args)
+		func=function(self,args)
+			local chunkname
+			if args.input then
+				chunkname = args.input
+			end
+			local f,r = loadstring(cli:get_luatext_arg(args),chunkname)
 			if not f then
 				return false, string.format("compile failed:%s\n",r)
 			end
 			r={xpcall(f,errutil.format)} -- TODO would be nice to be able to force backtrace or not per call
-			if not r[1] then 
+			if not r[1] then
 				return false, string.format("call failed:%s\n",r[2])
 			end
 			local s
@@ -669,18 +620,20 @@ cli:add_commands{
 	{
 		names={'set'},
 		help='show or set option',
-		arghelp='[-v|-c] [option[=value]]',
+		arghelp='[-v|-c] [-d] [option[=value]]',
 		args=argparser.create{
 			v=false,
 			c=false,
+			d=false,
 		},
 
 		help_detail=[[
  Use set with no options to see a list
-  -v show desciption when showing value
+  -v show description when showing value
   -c output as set command
+  -d reset value to default
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local mode
 			if args.v then
 				mode='full'
@@ -688,60 +641,133 @@ cli:add_commands{
 			if args.c then
 				mode='cmd'
 			end
-			if #args == 0 then	
-				local r={}
-				for name,pref in prefs._each() do
-					local status, desc = prefs._describe(name,mode)
-					-- desc will be error if we somehow get invalid in here
-					table.insert(r,desc)
+			if #args == 0 then
+				-- could reset all, but might be better to have explicit option
+				if args.d then
+					return false,'-d requires name'
 				end
-				return true,table.concat(r,'\n')
+				return true, prefs._describe_all({mode=mode})
 			end
 			if #args > 1 then
 				return false, 'unexpected args'
 			end
 			local name,value = string.match(args[1],'^([%a_][%w%a_]+)=(.*)$')
 			if not name then
-				return prefs._describe(args[1],mode)
+				name=args[1] -- no = portion, assume arg is name
 			end
-			return prefs._set(name,value)
+			if value then
+				if args.d then
+					return false,'unexpected value with -d'
+				end
+				prefs._set(name,value)
+				return true
+			end
+			if args.d then
+				prefs._set_default(name)
+				return true
+			end
+			return true,prefs._describe(name,{mode=mode})
+		end,
+	},
+	{
+		names={'cfgsave'},
+		help='save current settings',
+		arghelp='[-q] [filename]',
+		args=argparser.create{
+			q=false,
+		},
+		help_detail=[[
+ Save current settings to file.
+ file: Optional filename to write
+  defaults to startup file autosave.chdkptp or autosave_gui.chdkptp
+ -q: quiet
+]],
+		func=function(self,args)
+			local filename = args[1]
+			if filename then
+				prefs._save_file(filename)
+				if not args.q then
+					cli.infomsg('wrote %s\n',filename)
+				end
+			else
+				local path = get_chdkptp_home()
+				if not path then
+					return false,"CHDKPTP_HOME / HOME not defined"
+				end
+				write_autosave_rc_file()
+				if not args.q then
+					cli.infomsg('wrote %s\n',fsutil.joinpath(path,get_auto_rc_name()))
+				end
+			end
+			return true
+
+		end,
+	},
+	{
+		names={'cfgversion'},
+		help='config file compatibility check',
+		arghelp='<version>',
+		args=argparser.create{},
+		help_detail=[[
+ Used in autosaved config files to for compatibility. Not intended for end users
+ version: dotted version number, like 1.2.3
+]],
+		func=function(self,args)
+			local version = args[1]
+			if not version then
+				return false,'expected version'
+			end
+			local major, minor, build = string.match(version,'^(%d+)%.(%d+)%.(%d+)$')
+			if not major then
+				return false,'failed to parse version: '..version
+			end
+			major = tonumber(major)
+			minor = tonumber(minor)
+			build = tonumber(build)
+			-- currently, just warn if config is newer
+			if major > chdku.ver.MAJOR or major == chdku.ver.MAJOR and minor > chdku.ver.MINOR then
+				warnf('config created by newer version %s\n',version)
+			end
+			return true
 		end,
 	},
 	{
 		names={'quit','q'},
 		help='quit program',
-		func=function() 
+		no_status=true,
+		func=function()
 			cli.finished = true
 			return true
 		end,
 	},
 	{
 		names={'source'},
-		help='execute cli commands from file',
+		help='execute CLI commands from file',
 		arghelp='<file>',
 		args=argparser.create{ },
-		func=function(self,args) 
+		func=function(self,args)
 			return cli:execfile(args[1])
 		end,
 	},
 	{
 		names={'lua','.'},
 		help='execute remote lua',
-		arghelp='<lua code>',
+		arghelp='<lua code> | < <filename>',
+		args=argparser_text.create{ },
 		help_detail=[[
  Execute Lua code on the camera.
  Returns immediately after the script is started.
  Return values or error messages can be retrieved with getm after the script is completed.
 ]],
-		func=function(self,args) 
-			con:exec(args)
+		func=function(self,args)
+			con:exec(cli:get_luatext_arg(args))
 			return true
 		end,
 	},
 	{
 		names={'getm'},
 		help='get messages',
-		func=function(self,args) 
+		func=function(self,args)
 			local msgs=''
 			local msg,err
 			while true do
@@ -756,8 +782,9 @@ cli:add_commands{
 	{
 		names={'putm'},
 		help='send message',
+		args=argparser.nop,
 		arghelp='<msg string>',
-		func=function(self,args) 
+		func=function(self,args)
 			con:write_msg(args)
 			return true
 		end,
@@ -765,15 +792,16 @@ cli:add_commands{
 	{
 		names={'luar','='},
 		help='execute remote lua, wait for result',
-		arghelp='<lua code>',
+		arghelp='<lua code> | < <filename>',
+		args=argparser_text.create{ },
 		help_detail=[[
  Execute Lua code on the camera, waiting for the script to end.
  Return values or error messages are printed after the script completes.
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local rets={}
 			local msgs={}
-			con:execwait(args,{rets=rets,msgs=msgs})
+			con:execwait(cli:get_luatext_arg(args),{rets=rets,msgs=msgs})
 			local r=''
 			for i=1,#msgs do
 				r=r .. chdku.format_script_msg(msgs[i]) .. '\n'
@@ -797,7 +825,7 @@ cli:add_commands{
    -noflush: don't discard script messages
    -force: force kill even if camera does not support (crash / memory leaks likely!)
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			if not con:is_ver_compatible(2,6) then
 				if not args.force then
 					return false,'camera does not support clean kill, use -force if you are sure'
@@ -819,16 +847,23 @@ cli:add_commands{
 	{
 		names={'rmem'},
 		help='read memory',
-		args=argparser.create{i32=false}, -- word
-		arghelp='<address> [count] [-i32[=fmt]]',
+		args=argparser.create{
+				i32=false, -- word
+				f=false,
+				buf=false,
+		},
+		arghelp='<address> [count] [-buf] [-i32[=fmt] | -f=<filename>]',
 		help_detail=[[
  Dump <count> bytes or words starting at <address>
-  -i32 display as 32 bit words rather than byte oriented hex dump
-  -i32=<fmt> use printf format string fmt to display
+  -i32 count as 32 bit words, display as ints instead of byte oriented hex dump
+  -i32=<fmt> use printf format string fmt to display, default 0x%08x
+  -f=<filename> write binary data to file instead of displaying
+  -buf buffer data in camera memory, useful for reading TCM, address 0 etc
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local addr = tonumber(args[1])
 			local count = tonumber(args[2])
+			local flags = 0
 			if not addr then
 				return false, "bad args"
 			end
@@ -838,10 +873,19 @@ cli:add_commands{
 			if args.i32 then
 				count = count * 4
 			end
+			if args.buf then
+				flags = 1
+			end
 
-			local r = con:getmem(addr,count)
+			local r = con:getmem(addr,count,'string',flags)
 
-			if args.i32 then
+			if args.f then
+				fsutil.mkdir_parent(args.f)
+				local fh=fsutil.open_e(args.f,"wb")
+				fh:write(r)
+				fh:close()
+				return true, string.format("0x%08x %u %s\n",addr,count,args.f)
+			elseif args.i32 then
 				local fmt
 				if type(args.i32) == 'string' then
 					fmt = args.i32
@@ -868,7 +912,7 @@ cli:add_commands{
   ! error querying status
  serial numbers are not available from all models, nil will be shown if not available
 ]],
-		func=function() 
+		func=function()
 			local msg = ''
 			-- TODO usb only, will not show connected PTP/IP
 			local devs = chdk.list_usb_devices()
@@ -900,7 +944,7 @@ cli:add_commands{
  Some cameras have problems with paths > 32 characters
  Dryos cameras do not handle non 8.3 filenames well
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local src = args[1]
 			if not src then
 				return false, "missing source"
@@ -951,7 +995,7 @@ cli:add_commands{
 		args=argparser.create{nolua=false},
 		help_detail=[[
  <remote> file to download
- 	A/ is prepended if not present
+   A/ is prepended if not present
  [local]  destination
    If not specified, the file will be downloaded to the current directory
    If a directory, the file will be downloaded into it
@@ -959,7 +1003,7 @@ cli:add_commands{
    Allows download while running script
 ]],
 
-		func=function(self,args) 
+		func=function(self,args)
 			local src = args[1]
 			if not src then
 				return false, "missing source"
@@ -1003,6 +1047,8 @@ cli:add_commands{
 			imax=false,
 			dmin=false,
 			dmax=false,
+			sizemin=false,
+			sizemax=false,
 			fmatch='%a%a%a_%d%d%d%d%.%w%w%w',
 			rmatch=false,
 			maxdepth=2, -- dcim/subdir
@@ -1013,11 +1059,14 @@ cli:add_commands{
 			overwrite='ask',
 			quiet=false,
 			rm=false,
+			seq=1,
+			sort='date', -- order for seq options
+			r=false,
 		},
 		help_detail=[[
  [src] source directories, default A/DCIM.
   Specifying directories which do not follow normal image directory naming will
-  limit available substitution patterns.
+  limit available substitution strings.
  options:
    -d=<dest spec>    destination spec, using substitutions described below
                      default ${subdir}/${name} which mirrors the DCIM image
@@ -1028,6 +1077,8 @@ cli:add_commands{
    -imax=n           download images number n or less
    -dmin=n           download images from directory number n or greater
    -dmax=n           download images from directory number n or less
+   -sizemin=n        download images only if file size n or more
+   -sizemax=n        download images only if file size n or less
    -fmatch=<pattern> download only file with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
@@ -1038,10 +1089,17 @@ cli:add_commands{
    -overwrite=<str>  overwrite existing files (y|n|old|ask), default ask
    -quiet            don't display actions
    -rm               delete files after downloading
- note <pattern> is a lua pattern, not a filesystem glob like *.JPG
+   -seq=n            initial value for dlseq and shotseq subst strings, default 1
+   -sort=order       download order for dlseq and shotseq substitution, may be
+                     'path','name','date','size','shot' or a subst string, default 'date'
+   -r                sort descending instead of ascending
+
+ NOTE
+  <pattern> is a lua pattern, not a filesystem glob like *.JPG
+  if -rm is specified, file will be deleted even if not downloaded due to overwrite options.
 
 Substitutions
-${serial,strfmt}  camera serial number, or empty if not available, default format %s
+${serial}         camera serial number, or empty if not available
 ${pid,strfmt}     camera platform ID, default format %x
 ${ldate,datefmt}  PC clock date, os.date format, default %Y%m%d_%H%M%S
 ${lts,strfmt}     PC clock date as unix timestamp + microseconds, default format %f
@@ -1053,15 +1111,22 @@ ${basename}       Image name without extension, like IMG_1234
 ${ext}            Image extension, like .JPG
 ${subdir}         Image DCIM subdirectory, like 100CANON or 100___01 or 100_0101
 ${imgnum}         Image number like 1234
+${imgpfx}         Image prefix like IMG
 ${dirnum}         Image directory number like 101
 ${dirmonth}       Image DCIM subdirectory month, like 01, date folder naming cameras only
 ${dirday}         Image DCIM subdirectory day, like 01, date folder naming cameras only
+${dlseq}          Sequential number incremented per file downloaded
+${shotseq}        Sequential number incremented when imgnum changes.
+Standard string substitutions
 
-Unavailable values (e.g. ${dirday} without daily folders) result in an empty string
-PC clock times are set to the start of download, not per image
+ NOTE
+  ${shotseq} depends on sort grouping related shots together, like 'date' or 'shot'
+
+  Unavailable values (e.g. ${dirday} without daily folders) result in an empty string
+  PC clock times are set to the start of download, not per image
 ]],
 
-		func=function(self,args) 
+		func=function(self,args)
 			-- some names need translating
 			local opts={
 				dst=args.d,
@@ -1071,6 +1136,8 @@ PC clock times are set to the start of download, not per image
 				imgnum_max=args.imax,
 				dirnum_min=args.dmin,
 				dirnum_max=args.dmax,
+				sizemin=args.sizemin,
+				sizemax=args.sizemax,
 				fmatch=args.fmatch,
 				rmatch=args.rmatch,
 				maxdepth=tonumber(args.maxdepth),
@@ -1080,7 +1147,17 @@ PC clock times are set to the start of download, not per image
 				dbgmem=args.dbgmem,
 				verbose=not args.quiet,
 				overwrite=cli.get_download_overwrite_opt(args.overwrite),
+				-- shot seq subst requires sort
+				sort=args.sort,
+				sort_order='asc',
+				dlseq_start=tonumber(args.seq),
+				shotseq_start=tonumber(args.seq),
 			}
+			if args.r then
+				opts.sort_order = 'des'
+			else
+				opts.sort_order = 'asc'
+			end
 			if #args > 0 then
 				opts.start_paths={}
 				for i,v in ipairs(args) do
@@ -1106,6 +1183,8 @@ PC clock times are set to the start of download, not per image
 			imax=false,
 			dmin=false,
 			dmax=false,
+			sizemin=false,
+			sizemax=false,
 			fmatch='%a%a%a_%d%d%d%d%.%w%w%w',
 			rmatch=false,
 			maxdepth=2, -- dcim/subdir
@@ -1122,6 +1201,8 @@ PC clock times are set to the start of download, not per image
    -imax=n           delete images number n or less
    -dmin=n           delete images from directory number n or greater
    -dmax=n           delete images from directory number n or less
+   -sizemin=n        delete images only if file size n or more
+   -sizemax=n        delete images only if file size n or less
    -fmatch=<pattern> delete only file with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
@@ -1134,7 +1215,7 @@ PC clock times are set to the start of download, not per image
  file selection options are equivalent to imdl
 ]],
 
-		func=function(self,args) 
+		func=function(self,args)
 			-- some names need translating
 			local opts={
 				lastimg=args.last,
@@ -1142,6 +1223,8 @@ PC clock times are set to the start of download, not per image
 				imgnum_max=args.imax,
 				dirnum_min=args.dmin,
 				dirnum_max=args.dmax,
+				sizemin=args.sizemin,
+				sizemax=args.sizemax,
 				fmatch=args.fmatch,
 				rmatch=args.rmatch,
 				maxdepth=tonumber(args.maxdepth),
@@ -1173,10 +1256,12 @@ PC clock times are set to the start of download, not per image
 			imax=false,
 			dmin=false,
 			dmax=false,
+			sizemin=false,
+			sizemax=false,
 			fmatch='%a%a%a_%d%d%d%d%.%w%w%w',
 			rmatch=false,
 			maxdepth=2, -- dcim/subdir
-			sort='path',
+			sort='date',
 			r=false,
 			batchsize=20,
 			dbgmem=false,
@@ -1190,10 +1275,12 @@ PC clock times are set to the start of download, not per image
    -imax=n           list images number n or less
    -dmin=n           list images from directory number n or greater
    -dmax=n           list images from directory number n or less
+   -sizemin=n        list images only if file size n or more
+   -sizemax=n        list images only if file size n or less
    -fmatch=<pattern> list only files with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
    -maxdepth=n       only recurse into N levels of directory, default 2
-   -sort=order       where order is one of 'path','name','date','size' default 'path'
+   -sort=order       order may be 'path','name','date','size','shot' or a subst string, default 'date'
    -r                sort descending instead of ascending
    -batchsize=n      lower = slower, less memory used
    -dbgmem           print memory usage info
@@ -1203,7 +1290,7 @@ PC clock times are set to the start of download, not per image
  file selection options are equivalent to imdl
 ]],
 
-		func=function(self,args) 
+		func=function(self,args)
 			-- some names need translating
 			local opts={
 				lastimg=args.last,
@@ -1211,6 +1298,8 @@ PC clock times are set to the start of download, not per image
 				imgnum_max=args.imax,
 				dirnum_min=args.dmin,
 				dirnum_max=args.dmax,
+				sizemin=args.sizemin,
+				sizemax=args.sizemax,
 				fmatch=args.fmatch,
 				rmatch=args.rmatch,
 				maxdepth=tonumber(args.maxdepth),
@@ -1218,17 +1307,13 @@ PC clock times are set to the start of download, not per image
 				mtime=not args.nomtime,
 				batchsize=tonumber(args.batchsize),
 				dbgmem=args.dbgmem,
-				verbose=not args.quiet
+				verbose=not args.quiet,
+				sort=args.sort,
 			}
-			local sortopts={
-				path={'full'},
-				name={'name'},
-				date={'st','mtime'},
-				size={'st','size'},
-			}
-			local sortpath = sortopts[args.sort]
-			if not sortpath then
-				return false,'invalid sort '..tostring(args.sort)
+			if args.r then
+				opts.sort_order = 'des'
+			else
+				opts.sort_order = 'asc'
 			end
 			if #args > 0 then
 				opts.start_paths={}
@@ -1238,11 +1323,6 @@ PC clock times are set to the start of download, not per image
 			end
 
 			local files=con:imglist(opts)
-			if args.r then
-				util.table_path_sort(files,sortpath,'des')
-			else
-				util.table_path_sort(files,sortpath,'asc')
-			end
 			local r=''
 			for i,finfo in ipairs(files) do
 					local size = finfo.st.size
@@ -1257,11 +1337,13 @@ PC clock times are set to the start of download, not per image
 	{
 		names={'mdownload','mdl'},
 		help='download file/directories from the camera',
-		arghelp="[options] <remote, remote, ...> <target dir>",
+		arghelp="[options] <remote, remote, ...> <target>",
 		args=argparser.create{
 			fmatch=false,
 			dmatch=false,
 			rmatch=false,
+			sizemin=false,
+			sizemax=false,
 			nodirs=false,
 			maxdepth=100,
 			pretend=false,
@@ -1269,25 +1351,45 @@ PC clock times are set to the start of download, not per image
 			batchsize=20,
 			dbgmem=false,
 			overwrite='ask',
+			nosubst=false,
 		},
 		help_detail=[[
  <remote...> files/directories to download
- <target dir> directory to download into
+ <target> directory or name specification for downloaded files
  options:
    -fmatch=<pattern> download only file with path/name matching <pattern>
    -dmatch=<pattern> only create directories with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
-   -nodirs           only create directories needed to download file  
+   -sizemin=n        only download files if size n or more
+   -sizemax=n        only download files if size n or less
+   -nodirs           only create directories needed to download file
    -maxdepth=n       only recurse into N levels of directory
    -pretend          print actions instead of doing them
    -nomtime          don't preserve modification time of remote files
    -batchsize=n      lower = slower, less memory used
    -dbgmem           print memory usage info
    -overwrite=<str>  overwrite existing files (y|n|old|ask), default ask
+   -nosubst          don't do string substitution on file names
  note <pattern> is a lua pattern, not a filesystem glob like *.JPG
+
+Substitutions
+${serial,strfmt}  camera serial number, or '' if not available, default format %s
+${pid,strfmt}     camera platform ID, default format %x
+${ldate,datefmt}  PC clock date, os.date format, default %Y%m%d_%H%M%S
+${lts,strfmt}     PC clock date as unix timestamp + microseconds, default format %f
+${lms,strfmt}     PC clock milliseconds part, default format %03d
+${mdate,datefmt}  Camera file modified date, converted to PC time, os.date format, default %Y%m%d_%H%M%S
+${mts,strfmt}     Camera file modified date, as unix timestamp converted to PC time, default format %d
+${name}           File name, like SHOOT.LUA
+${basename}       Name without extension, like SHOOT
+${ext}            Extension, like .LUA
+${dir}            Full camera directory path, excluding initial A/, like CHDK/SCRIPTS/
+${reldir}         Directory path recursed into, like SCRIPTS/ or empty if not recursed
+Standard string substitutions
+
 ]],
 
-		func=function(self,args) 
+		func=function(self,args)
 			if #args < 2 then
 				return false,'expected source(s) and destination'
 			end
@@ -1296,11 +1398,13 @@ PC clock times are set to the start of download, not per image
 			for i,v in ipairs(args) do
 				srcs[i]=fsutil.make_camera_path(v)
 			end
-			-- TODO some of these need translating, so can't pass direct
+			-- some of these need translating, so can't pass directly as opts
 			local opts={
 				fmatch=args.fmatch,
 				dmatch=args.dmatch,
 				rmatch=args.rmatch,
+				sizemin=tonumber(args.sizemin),
+				sizemax=tonumber(args.sizemax),
 				dirs=not args.nodirs,
 				maxdepth=tonumber(args.maxdepth),
 				pretend=args.pretend,
@@ -1308,6 +1412,7 @@ PC clock times are set to the start of download, not per image
 				batchsize=tonumber(args.batchsize),
 				dbgmem=args.dbgmem,
 				overwrite=cli.get_download_overwrite_opt(args.overwrite),
+				nosubst=args.nosubst,
 			}
 			con:mdownload(srcs,dst,opts)
 			return true
@@ -1321,6 +1426,8 @@ PC clock times are set to the start of download, not per image
 			fmatch=false,
 			dmatch=false,
 			rmatch=false,
+			sizemin=false,
+			sizemax=false,
 			nodirs=false,
 			maxdepth=100,
 			pretend=false,
@@ -1333,14 +1440,16 @@ PC clock times are set to the start of download, not per image
    -fmatch=<pattern> upload only file with path/name matching <pattern>
    -dmatch=<pattern> only create directories with path/name matching <pattern>
    -rmatch=<pattern> only recurse into directories with path/name matching <pattern>
-   -nodirs           only create directories needed to upload file 
+   -sizemin=n        only upload files if size n or more
+   -sizemax=n        only upload files if size n or less
+   -nodirs           only create directories needed to upload file
    -maxdepth=n       only recurse into N levels of directory
    -pretend          print actions instead of doing them
    -nomtime          don't preserve local modification time
  note <pattern> is a lua pattern, not a filesystem glob like *.JPG
 ]],
 
-		func=function(self,args) 
+		func=function(self,args)
 			if #args < 2 then
 				return false,'expected source(s) and destination'
 			end
@@ -1348,11 +1457,13 @@ PC clock times are set to the start of download, not per image
 			local srcs={}
 			-- args has other stuff in it, copy array parts
 			srcs={unpack(args)}
-			-- TODO some of these need translating, so can't pass direct
+			-- some of these need translating, so can't pass directly as opts
 			local opts={
 				fmatch=args.fmatch,
 				dmatch=args.dmatch,
 				rmatch=args.rmatch,
+				sizemin=tonumber(args.sizemin),
+				sizemax=tonumber(args.sizemax),
 				dirs=not args.nodirs,
 				maxdepth=tonumber(args.maxdepth),
 				pretend=args.pretend,
@@ -1370,6 +1481,8 @@ PC clock times are set to the start of download, not per image
 			fmatch=false,
 			dmatch=false,
 			rmatch=false,
+			sizemin=false,
+			sizemax=false,
 			nodirs=false,
 			maxdepth=100,
 			pretend=false,
@@ -1379,10 +1492,12 @@ PC clock times are set to the start of download, not per image
 		help_detail=[[
  <target...> files/directories to remote
  options:
-   -fmatch=<pattern> upload only file with names matching <pattern>
+   -fmatch=<pattern> only delete files with names matching <pattern>
    -dmatch=<pattern> only delete directories with names matching <pattern>
    -rmatch=<pattern> only recurse into directories with names matching <pattern>
-   -nodirs           don't delete drictories recursed into, only files
+   -sizemin=n        only delete files if size n or more
+   -sizemax=n        only delete files if size n or less
+   -nodirs           don't delete directories recursed into, only files
    -maxdepth=n       only recurse into N levels of directory
    -pretend          print actions instead of doing them
    -ignore_errors    don't abort if delete fails, continue to next item
@@ -1390,7 +1505,7 @@ PC clock times are set to the start of download, not per image
  note <pattern> is a lua pattern, not a filesystem glob like *.JPG
 ]],
 
-		func=function(self,args) 
+		func=function(self,args)
 			if #args < 1 then
 				return false,'expected at least one target'
 			end
@@ -1399,11 +1514,13 @@ PC clock times are set to the start of download, not per image
 			for i,v in ipairs(args) do
 				tgts[i]=fsutil.make_camera_path(v)
 			end
-			-- TODO some of these need translating, so can't pass direct
+			-- some of these need translating, so can't pass directly as opts
 			local opts={
 				fmatch=args.fmatch,
 				dmatch=args.dmatch,
 				rmatch=args.rmatch,
+				sizemin=tonumber(args.sizemin),
+				sizemax=tonumber(args.sizemax),
 				dirs=not args.nodirs,
 				maxdepth=tonumber(args.maxdepth),
 				pretend=args.pretend,
@@ -1446,7 +1563,7 @@ PC clock times are set to the start of download, not per image
 	{
 		names={'version','ver'},
 		help='print API and program versions',
-		args=argparser.create{ 
+		args=argparser.create{
 			p=false,
 			l=false,
 		},
@@ -1455,7 +1572,7 @@ PC clock times are set to the start of download, not per image
  -p print program version
  -l print library versions
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local host_ver = string.format("host:%d.%d cam:",chdku.apiver.MAJOR,chdku.apiver.MINOR)
 			local status = true
 			local r
@@ -1467,23 +1584,29 @@ PC clock times are set to the start of download, not per image
 				else
 					status = false
 					r =  host_ver .. string.format("error %s",cam_minor)
-				end 
+				end
 			else
 				r = host_ver .. "not connected"
 			end
 			if args.p then
-				r = string.format('chdkptp %d.%d.%d-%s built %s %s\n%s',
-									chdku.ver.MAJOR,chdku.ver.MINOR,chdku.ver.BUILD,chdku.ver.DESC,
+				r = string.format('chdkptp %s-%s built %s %s\n%s',
+									chdku.ver.FULL_STR,chdku.ver.DESC,
 									chdku.ver.DATE,chdku.ver.TIME,r)
 			end
 			if args.l then
 				r = r .. '\n'.._VERSION -- Lua version
+				if lfs then
+					r = r .. '\n'..lfs._VERSION
+				end
 				-- note these will only show up if actually running gui
 				if iup then
 					r = r .. '\nIUP '..iup._VERSION
 				end
 				if cd then
 					r = r .. '\nCD '..cd._VERSION
+				end
+				if lgi then
+					r = r .. '\nLGI '..lgi._VERSION
 				end
 			end
 			return status,r
@@ -1497,21 +1620,25 @@ PC clock times are set to the start of download, not per image
 			b=false,
 			d=false,
 			p=false,
+			v='1193', -- default to Canon. Canon has multiple IDs, but https://usb-ids.gowdy.us/read/UD?sort=name shows only shows consumer devs on this one
 			s=false,
 			h=false,
 			nodis=false,
 			nopat=false,
 		},
-		
+
 		help_detail=[[
- If no options are given, connects to the first available USB device.
+ If no options are given, connects to the first available PTP USB device.
  USB dev spec:
   -b=<bus>
-  -d=<dev> 
+  -d=<dev>
   -p=<pid>
-  -s=<serial> 
-  model 
- <pid> is the USB product ID, as a decimal or hexadecimal number.
+  -s=<serial>
+  -v[=<vid>]
+  model
+
+ <pid> USB product ID, as decimal or hex number.
+ <vid> USB vendor ID, as decimal or hex number, default 1193 (Canon). Use -v alone for all
  All other values are treated as a Lua pattern, unless -nopat is given.
  If the serial or model are specified, a temporary connection will be made to each device
  If <model> includes spaces, it must be quoted.
@@ -1520,13 +1647,14 @@ PC clock times are set to the start of download, not per image
   -nodis do not close current connection
   -nopat use plain substring matches instead of patterns
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local match = {}
 			local opt_map = {
 				b='bus',
 				d='dev',
 				p='product_id',
 				s='serial_number',
+				v='vendor_id',
 				[1]='model',
 			}
 			for k,v in pairs(opt_map) do
@@ -1553,6 +1681,9 @@ PC clock times are set to the start of download, not per image
 			else
 				if match.product_id and not tonumber(match.product_id) then
 					return false,"expected number for product id"
+				end
+				if match.vendor_id and not tonumber(match.vendor_id) then
+					return false,"expected number for vendor id"
 				end
 				local devices = chdk.list_usb_devices()
 				for i, devinfo in ipairs(devices) do
@@ -1596,7 +1727,7 @@ PC clock times are set to the start of download, not per image
 					end
 					status = true
 				end
-			else 
+			else
 				status = false
 				err = "no matching devices found"
 			end
@@ -1606,11 +1737,19 @@ PC clock times are set to the start of download, not per image
 	},
 	{
 		names={'reconnect','r'},
+		args=argparser.create{
+			wait=2500,
+		},
 		help='reconnect to current device',
+		arghelp="[-wait=<ms>]",
+		help_detail=[[
+ options:
+   -wait=<N> wait N ms before attempting to reconnect, default 2500
+]],
 		-- NOTE camera may connect to a different device,
 		-- will detect and fail if serial, model or pid don't match
-		func=function(self,args) 
-			con:reconnect()
+		func=function(self,args)
+			con:reconnect({wait=tonumber(args.wait)})
 			cli:connection_status_change()
 			return true
 		end,
@@ -1618,7 +1757,7 @@ PC clock times are set to the start of download, not per image
 	{
 		names={'disconnect','dis'},
 		help='disconnect from device',
-		func=function(self,args) 
+		func=function(self,args)
 			con:disconnect()
 			cli:connection_status_change()
 			return true
@@ -1629,7 +1768,7 @@ PC clock times are set to the start of download, not per image
 		help='list files/directories on camera',
 		args=argparser.create{l=false},
 		arghelp="[-l] [path]",
-		func=function(self,args) 
+		func=function(self,args)
 			local listops
 			local path=args[1]
 			path = fsutil.make_camera_path(path)
@@ -1681,7 +1820,7 @@ PC clock times are set to the start of download, not per image
    -norecon  don't try to reconnect
    -wait=<N> wait N ms before attempting to reconnect, default 3500
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local bootfile=args[1]
 			if bootfile then
 				bootfile = fsutil.make_camera_path(bootfile)
@@ -1708,22 +1847,24 @@ PC clock times are set to the start of download, not per image
 			wait=100,
 			novp=false,
 			nobm=false,
+			nobmo=false,
 			nopal=false,
 			quiet=false,
 			pbm=false,
 		}),
 		help_detail=[[
  file:
- 	optional output file name, defaults to chdk_<pid>_<date>_<time>.lvdump
+   optional output file name, defaults to chdk_<pid>_<date>_<time>.lvdump
  options:
    -count=<N> number of frames to dump
    -wait=<N>  wait N ms between frames
    -novp      don't get viewfinder data
    -nobm      don't get ui overlay data
+   -nobmo     don't get D6 ui overlay opacity data
    -nopal     don't get palette for ui overlay
    -quiet     don't print progress
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local dumpfile=args[1]
 			local what = 0
 			if not args.novp then
@@ -1733,6 +1874,9 @@ PC clock times are set to the start of download, not per image
 				what = what + 4
 				if not args.nopal then
 					what = what + 8
+				end
+				if not args.nobmo then
+					what = what + 16
 				end
 			end
 			if what == 0 then
@@ -1748,19 +1892,16 @@ PC clock times are set to the start of download, not per image
 			if not con:live_is_api_compatible() then
 				return false,'incompatible api'
 			end
-			status, err = con:live_dump_start(dumpfile)
-			if not status then
-				return false,err
-			end
+			con:live_dump_start(dumpfile)
 			for i=1,args.count do
 				if not args.quiet then
 					printf('grabbing frame %d\n',i)
 				end
-				status, err = con:live_get_frame(what)
+				status, err = con:live_get_frame_pcall(what)
 				if not status then
 					break
 				end
-				status, err = con:live_dump_frame()
+				status, err = con:live_dump_frame_pcall()
 				if not status then
 					break
 				end
@@ -1777,45 +1918,69 @@ PC clock times are set to the start of download, not per image
 	},
 	{
 		names={'lvdumpimg'},
-		help='dump camera display frames to netpbm images',
+		help='dump camera display frames to images',
 		arghelp="[options]",
 		args=argparser.create({
---			infile=false,
+			infile=false,
 			count=1,
+			seek=false,
 			wait=false,
-			fps=10,
+			fps=false,
 			vp=false,
 			bm=false,
 			pipevp=false,
 			pipebm=false,
+			vpfmt='ppm',
 			nopal=false,
+			nobmo=false,
 			quiet=false,
 			nosubst=false,
 		}),
--- TODO
---   -infile=<file> lvdump file to use as source instead of camera
 		help_detail=[[
  options:
+   -infile=<file> get frames from lvdump file <file> instead of camera
    -count=<N> number of frames to dump, default 1
+              if source is file, use 'all' for all frames
+   -seek=<N>  if sources is file start on Nth frame or Nth from end if negative
    -wait=<N>  wait N ms between frames
-   -fps=<N>   specify wait as a frame rate, default 10
-   -vp[=dest] get viewfinder in ppm format
+   -fps=<N>   specify wait as a frame rate, 0 = unlimited
+              default 10 if source is camera, 0 if file
+   -vp[=dest] get viewfinder in format specified by vpfmt
    -bm[=dest] get ui overlay in pam format
-   -pipevp[=oneproc]
-   -pipebm[=oneproc]
-      treat vp or bm 'dest' as a command to pipe to. With =oneproc a single process
-      receives all frames. Otherwise, a new process is spawned for each frame
+   -vpfmt=<ppm|yuv-s-pgm|yuv-s-raw>
+      format for viewport data, default ppm
+       ppm        RGB ppm
+       yuv-s-pgm  Output Y, U, and V channels as separate pgm format images
+       yuv-s-raw  Output Y, U, and V channels as raw values
+   -pipevp[=pipetype]
+   -pipebm[=pipetype]
+      interpret vp or bm 'dest' as a command to pipe to. pipetype may be one of
+       frame   command started once per frame. For split formats, each
+               channel is piped to the same process. Default
+       split   for split formats, command is started for each channel
+       oneproc a single command is piped all frames
+       combine for -pipebm only, specify bitmap be piped to the command
+               specified with -pipevp. Viewport data is written first
    -nopal     don't get palette for ui overlay
+   -nobmo     don't get D6 ui overlay opacity data
    -quiet     don't print progress
-   -nosubst   don't do pattern substitution on file names
-  vp and bm 'dest' may include substitution patterns
+   -nosubst   don't do string substitution on file names
+  vp and bm 'dest' may include substitution strings
    ${date,datefmt} current time formatted with os.date()
    ${frame,strfmt} current frame number formatted with string.format
    ${time,strfmt}  current time in seconds, as float, formatted with string.format
-   default vp_${time,%014.3f}.ppm bm_${time,%014.3f}.pam for viewfinder and ui respectively
+   ${serial}       camera serial number, or empty if not available or infile used
+   ${pid,strfmt}   camera platform ID, default format %x, 0 if source is file
+   ${channel}      y, u or v, if format is split, otherwise empty
+   Standard string substitutions
+   Viewport defaults depend on -vpfmt
+    ppm:       vp_${time,%014.3f}.ppm
+    yuv-s-pgm: vp_${time,%014.3f}-${channel}.pgm
+    yuv-s-raw: vp_${time,%014.3f}-${channel}.bin
+   Bitmap default is bm_${time,%014.3f}.pam
    if piping with oneproc, time will be the start of the first frame and frame will be 1
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local what = 0
 			if args.vp then
 				what = 1
@@ -1824,6 +1989,9 @@ PC clock times are set to the start of download, not per image
 				what = what + 4
 				if not args.nopal then
 					what = what + 8
+				end
+				if not args.nobmo then
+					what = what + 16
 				end
 			end
 			if what == 0 then
@@ -1836,71 +2004,128 @@ PC clock times are set to the start of download, not per image
 				if args.wait then
 					return false,'specify wait or fps, not both'
 				end
-				args.wait = 1000/tonumber(args.fps)
+				local fps = tonumber(args.fps)
+				if fps == 0 then
+					args.wait = false
+				else
+					args.wait = 1000/fps
+				end
+			end
+			if not args.wait then
+				if args.infile then
+					args.wait = false
+				else
+					args.wait = 100
+				end
 			end
 			if args.count then
-				args.count = tonumber(args.count)
+				if args.count == 'all' then
+					if not args.infile then
+						return false, 'count=all only valid when source is file'
+					end
+				else
+					args.count = tonumber(args.count)
+					if not args.count or args.count < 1 then
+						return false, 'invalid count'
+					end
+				end
 			end
 
-			if not con:is_connected() then
-				return false,'not connected'
+			local d_opts = {
+				nosubst = args.nosubst,
+				missing = info,
+				vp = cli.init_lvdumpimg_file_opts('vp',args),
+				bm = cli.init_lvdumpimg_file_opts('bm',args),
+			}
+
+			local lv
+			local get_frame
+			if args.infile then
+				lv = lvutil.live_wrapper()
+				lv:replay_load(args.infile)
+				if args.seek then
+					local seek = tonumber(args.seek)
+					if seek < 0 then
+						lv:replay_seek('end',seek)
+					else
+						lv:replay_seek('set',seek)
+					end
+				end
+				get_frame = function()
+					return pcall(function()
+						lv:replay_frame()
+					end)
+				end
+			else
+				if args.seek then
+					return false, 'seek only valid when source is file'
+				end
+				if not con:is_connected() then
+					return false,'not connected'
+				end
+
+				if not con:live_is_api_compatible() then
+					return false,'incompatible api'
+				end
+				d_opts.con = con
+				lv = con.live
+				get_frame = function()
+					return con:live_get_frame_pcall(what)
+				end
 			end
 
+			local t0=ticktime.get()
+			local t_frame_start=t0
+
+			local i = 1
+			lv:dumpimg_init(d_opts)
 			local status,err
-			if not con:live_is_api_compatible() then
-				return false,'incompatible api'
-			end
+			while true do
+				t_frame_start=ticktime.get()
 
-			-- state for substitutions
-			local subst=varsubst.new({
-				frame=varsubst.format_state_val('frame','%06d'),
-				time=varsubst.format_state_val('time','%d'),
-				date=varsubst.format_state_date('date','%Y%m%d_%H%M%S'),
-			})
-
-			local vp_opts = cli.init_lvdumpimg_file_opts('vp',args,subst)
-			local bm_opts = cli.init_lvdumpimg_file_opts('bm',args,subst)
-
-			local t0=ustime.new()
-			local t_frame_start=ustime.new()
-
-			-- TODO frame source should be split out to allow dumping from existing lvdump file
-			for i=1,args.count do
-				t_frame_start:get()
-				-- TODO should use wrapped frame, maybe con:live_get_frame
-				frame = con:get_live_data(frame,what)
-
-				subst.state.frame = i
-				-- set time state once per frame to avoid varying between viewport and bitmap
-				subst.state.date = os.time()
-				subst.state.time = ustime.new():float()
-
-				if args.vp then
-					vp_opts.write(frame)
+				-- break on error to allow cleanup
+				status,err = get_frame()
+				if not status then
+					break
 				end
-				if args.bm then
-					bm_opts.write(frame)
+
+				status,err = lv:dumpimg_frame_pcall()
+				if not status then
+					break
 				end
-				if args.wait and i < args.count and t_frame_start:diffms() < args.wait then
-					sys.sleep(args.wait - t_frame_start:diffms())
+
+				if args.count ~= 'all' and i >= args.count then
+					break
+				end
+
+				if args.infile and lv:replay_eof() then
+					if args.count ~= 'all' then
+						util.warnf('eof at %d of %d\n',i,args.count)
+					end
+					break
+				end
+				i = i + 1
+				local etms=ticktime.elapsedms(t_frame_start)
+				if args.wait and etms < args.wait then
+					sys.sleep(args.wait - etms)
 				end
 			end
-			-- if using oneproc pipe, need to close
-			if vp_opts.filehandle then
-				vp_opts.filehandle:close()
+			-- close handles if using oneproc
+			lv:dumpimg_finish()
+			-- clean up replay
+			if args.infile then
+				lv:replay_end()
 			end
-			if bm_opts.filehandle then
-				bm_opts.filehandle:close()
-			end
-			if subst.state.frame and not args.quiet then
-				local t_total = t0:diffms()/1000
+			if i > 0 and not args.quiet then
+				local t_total = ticktime.elapsed(t0)
 				-- fudge to handle the final sleep being skipped
-				if args.wait and t_frame_start:diffms() < args.wait then
-					t_total = t_total + (args.wait - t_frame_start:diffms())/1000
+				local etms=ticktime.elapsedms(t_frame_start)
+				if args.wait and etms < args.wait then
+					t_total = t_total + (args.wait - etms)/1000
 				end
-				cli.dbgmsg('frames:%d time:%f fps:%f\n',subst.state.frame,t_total,subst.state.frame/t_total)
+				cli.dbgmsg('frames:%d time:%0.2f fps:%0.2f\n',i,t_total,i/t_total)
 			end
-			return true
+			return status,err
 		end,
 	},
 	{
@@ -1916,14 +2141,18 @@ PC clock times are set to the start of download, not per image
 			isomode=false,
 			nd=false,
 			sd=false,
+			sdmode=false,
 			raw=false,
 			dng=false,
+			cfmt=false,
 			pretend=false,
 			nowait=false,
 			dl=false,
 			rm=false,
+			seq=false,
 		}),
-		-- TODO allow setting destinations and filetypes for -dl
+		-- TODO allow filetypes for -dl
+		-- TODO should support canon native raw
 		help_detail=[[
  options:
    -u=<s|a|96>
@@ -1932,20 +2161,47 @@ PC clock times are set to the start of download, not per image
       96  APEX*96
    -tv=<v>    shutter speed. In standard units both decimal and X/Y accepted
    -sv=<v>    ISO value, Canon "real" ISO
-   -svm=<v>   ISO value, Canon "Market" ISO (requires CHDK 1.3)
+   -svm=<v>   ISO value, Canon "Market" ISO (requires CHDK 1.3 or later)
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units]  subject distance, units one of m, mm, in, ft default m
+   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
+                  Decimals accepted, -1 or inf for infinity.
+   -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
+                  if NONE, override will be ignored if not supported in current mode
+                  if not given, the current camera mode is preferred
+                  if port requires a different mode for SD override, it will be used
    -raw[=1|0] Force raw on or off, defaults to current camera setting
    -dng[=1|0] Force DNG on or off, implies raw if on, default current camera setting
+   -cfmt=<fmt> Canon image format. One of JPG, CR2, BOTH. Defaults to current UI setting
+               Requires native firmware raw support, CHDK >= 1.5
    -pretend   print actions instead of running them
    -nowait    don't wait for shot to complete
-   -dl        download shot file(s)
+   -dl[=<dest spec>] download shot file(s), dest spec is a substitution string default ${name}
    -rm        remove file after shooting
+   -seq=<n>     initial value for shotseq subst string, default cli_shotseq
   Any exposure parameters not set use camera defaults
+
+Substitutions
+${serial}         camera serial number, or empty if not available
+${pid,strfmt}     camera platform ID, default format %x
+${ldate,datefmt}  PC clock date of shot, os.date format, default %Y%m%d_%H%M%S
+${lts,strfmt}     PC clock date as unix timestamp + microseconds, default format %f
+${lms,strfmt}     PC clock milliseconds part, default format %03d
+${name}           Image full name, like IMG_1234.JPG
+${basename}       Image name without extension, like IMG_1234
+${ext}            Image extension, like .JPG. For raw, as set in CHDK settings
+${subdir}         Image DCIM subdirectory, like 100CANON or 100___01 or 100_0101
+${imgnum}         Image number like 1234
+${imgpfx}         Image prefix like IMG
+${imgfmt}         Image format, one of 'JPG', 'DNG', 'RAW'
+${dirnum}         Image directory number like 101
+${dirmonth}       Image DCIM subdirectory month, like 01, date folder naming cameras only
+${dirday}         Image DCIM subdirectory day, like 01, date folder naming cameras only
+${shotseq}        Sequential number incremented per shot
+Standard string substitutions
 ]],
-		func=function(self,args) 
+		func=function(self,args)
 			local opts,err = cli:get_shoot_common_opts(args)
 			if not opts then
 				return false,err
@@ -1968,11 +2224,35 @@ PC clock times are set to the start of download, not per image
 			if args.raw then
 				opts.raw=tonumber(args.raw)
 			end
+			if args.cfmt then
+				opts.cfmt = ({cr2=2,jpg=1,both=3})[string.lower(args.cfmt)]
+				if not opts.cfmt then
+					return false, string.format("unexpected cfmt %s",tostring(args.cfmt))
+				end
+			end
 			if args.rm or args.dl then
 				if args.nowait then
 					return false, "can't download or remove with nowait"
 				end
 				opts.info=true
+			end
+			local subst = varsubst.new(util.extend_table_multi({},{
+				chdku.con_subst_funcs,
+				chdku.ltime_subst_funcs,
+--				chdku.stat_subst_funcs,
+				chdku.path_subst_funcs,
+				{
+					shotseq=varsubst.format_state_val('shotseq','%04d'),
+					imgfmt=varsubst.format_state_val('imgfmt','%s'),
+				},
+			}))
+			-- default download name - match camera name with no directory
+			if args.dl == true then
+				args.dl='${name}'
+			end
+			if args.dl then
+				-- syntax check
+				subst:validate(args.dl)
 			end
 			local cmd=string.format('rlib_shoot(%s)',util.serialize(opts))
 			if args.pretend then
@@ -1980,7 +2260,7 @@ PC clock times are set to the start of download, not per image
 			end
 			if args.nowait then
 				con:exec(cmd,{libs={'rlib_shoot'}})
-				return
+				return true
 			end
 
 			local rstatus,rerr = con:execwait('return '..cmd,{libs={'serialize_msgs','rlib_shoot'}})
@@ -1991,6 +2271,15 @@ PC clock times are set to the start of download, not per image
 			if not (args.dl or args.rm) then
 				return true
 			end
+
+			chdku.set_subst_time_state(subst.state)
+			con:set_subst_con_state(subst.state)
+			-- seq only modified for downloaded shots
+			if args.seq then
+				prefs.cli_shotseq = tonumber(args.seq)
+			end
+			subst.state.shotseq = prefs.cli_shotseq
+			prefs.cli_shotseq = prefs.cli_shotseq + 1
 
 			local info = rstatus
 
@@ -2006,10 +2295,20 @@ PC clock times are set to the start of download, not per image
 				local raw_dir
 				local raw_ext
 				local raw_pfx
-				if info.raw_in_dir then
+				-- in directory with jpeg
+				if info.raw_dir_opt == 1 then
 					raw_dir = info.dir
+				-- A/RAW/...
+				elseif info.raw_dir_opt == 2 then
+					raw_dir = string.gsub(info.dir,'^A/DCIM','A/RAW')
 				else
-					raw_dir = 'A/DCIM/100CANON'
+					-- TODO hack for date naming cams, will use A/DCIM/101___01 if raw in dir not set in CHDK >= 1.3
+					-- cameras dir will be either nnn___MM or nnn_MMDD
+					if string.match(info.dir,'^A/DCIM/[0-9][0-9][0-9]_') then
+						raw_dir = 'A/DCIM/101___01'
+					else
+						raw_dir = 'A/DCIM/100CANON'
+					end
 				end
 				if info.dng and info.use_dng_ext then
 					raw_ext = 'DNG'
@@ -2024,18 +2323,50 @@ PC clock times are set to the start of download, not per image
 					raw_pfx = 'RAW_'
 				end
 				raw_path = string.format('%s/%s_%04d.%s',raw_dir,raw_pfx,info.exp,raw_ext)
-			end
-			-- TODO some delay may be required between shot and dl start
-			if args.dl then
-				cli:print_status(cli:execute('download '..jpg_path))
-				if raw_path then
-					cli:print_status(cli:execute('download '..raw_path))
+				if info.dng then
+					subst.state.imgfmt='DNG'
+				else
+					subst.state.imgfmt='RAW'
 				end
 			end
-			if args.rm then
-				cli:print_status(cli:execute('rm -maxdepth=0 '..jpg_path))
-				if raw_path then
+			-- raw should always exist by the time shoot() finishes
+			if raw_path then
+				if args.dl then
+					util.extend_table(subst.state,fsutil.parse_image_path_cam(raw_path,{string=true}))
+					local dst=subst:run(args.dl)
+					cli:print_status(cli:execute('download '..raw_path..' '..dst))
+				end
+				if args.rm then
 					cli:print_status(cli:execute('rm -maxdepth=0 '..raw_path))
+				end
+			end
+
+			local canon_files = {}
+			if info.canon_raw then
+				local raw_path = string.gsub(jpg_path,'%.JPG$','.CR2')
+				table.insert(canon_files,raw_path)
+			end
+			if info.canon_jpg then
+				table.insert(canon_files,jpg_path)
+			end
+
+			-- may be inefficient if files aren't in same order written by canon FW
+			-- firmware seems to normally do CR2 first
+			for i,fn in ipairs(canon_files) do
+				con:execwait(string.format([[ rlib_wait_file("%s") ]], fn),{libs='wait_file'})
+
+				if args.dl then
+					util.extend_table(subst.state,fsutil.parse_image_path_cam(fn,{string=true}))
+					if subst.state.ext == '.JPG' then
+						subst.state.imgfmt='JPG'
+					else
+						subst.state.imgfmt='CR2'
+					end
+					local dst=subst:run(args.dl)
+					cli:print_status(cli:execute('download '..fn..' '..dst))
+				end
+				if args.rm then
+					cli:print_status(cli:execute('rm -maxdepth=0 '..fn))
 				end
 			end
 			return true
@@ -2045,8 +2376,8 @@ PC clock times are set to the start of download, not per image
 	-- or at least make the syntax / options consistent
 	{
 		names={'remoteshoot','rs'},
-		help='shoot and download without saving to SD (requires CHDK 1.2)',
-		arghelp="[local] [options]",
+		help='shoot and download without saving to SD (requires CHDK >= 1.2)',
+		arghelp="[dest] [options]",
 		args=argparser.create{
 			u='s',
 			tv=false,
@@ -2056,7 +2387,9 @@ PC clock times are set to the start of download, not per image
 			isomode=false,
 			nd=false,
 			sd=false,
+			sdmode=false,
 			jpg=false,
+			craw=false,
 			raw=false,
 			dng=false,
 			dnghdr=false,
@@ -2067,9 +2400,24 @@ PC clock times are set to the start of download, not per image
 			shots=false,
 			int=false,
 			badpix=false,
+			shotwait=false,
+			filedummy=false,
+			jpgdummy=false,
+			nosubst=false,
+			seq=false,
+			script=false,
+			camscript=false,
+			tpl=false,
+			cfg=false,
+			menuopts=false,
 		},
 		help_detail=[[
- [local]       local destination directory or filename (w/o extension!)
+ [dest] path/name specification for saved files
+  None: Save in current directory, with default names like IMG_0123.jpg
+  Contains a '$': Name generated using substitutions below (unless -nosubst)
+  Ending in '/' or name of existing directory: Default names saved in directory
+  Other: Extension appended based on type. Not useful with multi-shot options
+
  options:
    -u=<s|a|96>
       s   standard units (default)
@@ -2077,28 +2425,91 @@ PC clock times are set to the start of download, not per image
       96  APEX*96
    -tv=<v>    shutter speed. In standard units both decimal and X/Y accepted
    -sv=<v>    ISO value, Canon "real" ISO
-   -svm=<v>   ISO value, Canon "Market" ISO (requires CHDK 1.3)
+   -svm=<v>   ISO value, Canon "Market" ISO (requires CHDK 1.3 or later)
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units]  subject distance, units one of m, mm, in, ft default m
+   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
+                  Decimals accepted, -1 or inf for infinity.
+   -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
+                  if NONE, override will be ignored if not supported in current mode
+                  if not given, the current camera mode is preferred
+                  if port requires a different mode for SD override, it will be used
    -jpg         jpeg, default if no other options (not supported on all cams)
+   -craw        Canon native raw, requires CHDK >=1.5, and remoteshoot support
    -raw         framebuffer dump raw
    -dng         DNG format raw
    -dnghdr      save DNG header to a separate file, ignored with -dng
-   -s=<start>   first line of for subimage raw
+   -s=<start>   first line of for subimage CHDK raw
    -c=<count>   number of lines for subimage
    -cont[=n]    shoot in continuous mode, optionally specifying number of shots
    -quick[=n]   shoot by holding halfshoot and repeatedly clicking full
    -shots=<n>   shoot n shots
    -int=<n.m>   interval for multiple shots, in seconds
    -badpix[=n]  interpolate over pixels with value <= n, default 0, (dng only)
+   -shotwait=<n> wait n ms for shot to complete, default 20000 or 2*tv+10000 if -tv given
+   -filedummy   write dummy IMG_nnnn.JPG (or .CR2) to avoid play / shutdown crash on some
+                cams. -jpgdummy also accepted for backward compatibility
+   -nosubst     don't do string substitution on file names
+   -seq=<n>     initial value for shotseq subst string, default cli_shotseq
+   -script=<filename> use local file <filename> for shooting script
+   -camscript=<filename> use local file <filename> for shooting script, where
+                script is a CHDK camera side Lua script with @/# menu options
+                If path begins with A/, the file is loaded from the camera
+   -tpl=<filename> template for use with -camscript
+   -cfg=<filename> CHDK saved script settings file for use with -camscript
+                   If path begins with A/, the file is loaded from the camera
+   -menuopts=<name1=value,...> set individual CHDK menu options with -camscript
+                delimited by ','
+
+ Using custom shooting scripts:
+   -script, -camscript and related options can be used to remote shoot with
+   custom exposure or other logic. -camscript allows the use of scripts written
+   to be run from the CHDK menu, without specific support for remoteshoot.
+   However, whether this actually works depends on the specific script.
+
+   The -tpl and -cfg options operate as described for the camscript command,
+   and the comma delimited items of -menuopts are equivalent to the menu option
+   arguments. camscript may also be used to generate cfg files for use with
+   -camscript or scripts for use with -script.
+
+   Files specified for -cfg and -camscript are loaded from the camera if the
+   path starts with 'A/'. Use './A/...' or a full path to specify local files
+   in a directory named 'A'.
+
+   When using -script or -camscript, many remoteshoot options have no effect
+   unless the camera side script has code to specifically support them. This
+   includes exposure, focus, -filedummy and canon image format related options.
+   Additionally, options defining number of shots and interval (-shots, -cont,
+   -int etc) must match what the script will do, but will not control the script
+   unless it has code to implement them.  Scripts may access the values of these
+   options using the rs_opts global variable.
+
+   Messages sent by the script using write_usb_msg are displayed.
+
+Substitutions
+${serial}         camera serial number, or empty if not available
+${pid,strfmt}     camera platform ID, default format %x
+${ldate,datefmt}  Time of shot (PC clock), os.date format, default %Y%m%d_%H%M%S
+${lts,strfmt}     Time of shot as unix timestamp + microseconds, default format %f
+${lms,strfmt}     Time of shot milliseconds part, default format %03d
+${name}           Image full name, like IMG_1234.JPG
+${basename}       Image name without extension, like IMG_1234
+${ext}            Image extension, like .jpg
+${imgnum}         Image number like 1234
+${imgfmt}         Image format, one of 'JPG', 'DNG', 'RAW', 'DNG_HDR'
+${shotseq}        Sequential number incremented per shot
+Standard string substitutions
 ]],
 		func=function(self,args)
 			local dst = args[1]
 			local dst_dir
+			local do_subst
 			if dst then
-				if string.match(dst,'[\\/]+$') then
+				if not args.nosubst and string.match(dst,'%$') then
+					do_subst=true
+					varsubst.validate_funcs(chdku.rc_subst_funcs,dst)
+				elseif string.match(dst,'[\\/]+$') then
 					-- explicit / treat it as a directory
 					-- and check if it is
 					dst_dir = string.sub(dst,1,-2)
@@ -2123,9 +2534,13 @@ PC clock times are set to the start of download, not per image
 				lstart=0,
 				lcount=0,
 			})
+			opts.filedummy = (args.filedummy or args.jpgdummy)
 			-- fformat required for init
 			if args.jpg then
 				opts.fformat = opts.fformat + 1
+			end
+			if args.craw then
+				opts.fformat = opts.fformat + 8
 			end
 			if args.dng then
 				opts.fformat = opts.fformat + 6
@@ -2137,7 +2552,7 @@ PC clock times are set to the start of download, not per image
 					opts.fformat = opts.fformat + 4
 				end
 			end
-			-- default to jpeg TODO won't be supported on cams without raw hook
+			-- default to jpeg TODO won't be supported on cams without filewrite hook
 			if opts.fformat == 0 then
 				opts.fformat = 1
 				args.jpg = true
@@ -2180,6 +2595,46 @@ PC clock times are set to the start of download, not per image
 					opts.shots = 1
 				end
 			end
+			local shootscript
+			if args.script then
+				shootscript=fsutil.readfile(args.script,{bin=true})
+			end
+			if args.camscript then
+				if args.script then
+					return false,'specify -script or -camscript, not both'
+				end
+				local menuvals
+				if args.menuopts then
+					if type(args.menuopts) ~= 'string' then
+						return false,'-menuopts requires option string'
+					end
+					menuvals = {}
+					for i,s in ipairs(util.string_split(args.menuopts,',',{plain=true,empty=false})) do
+						local name,val = s:match('([A-Za-z0-9._-]+)=(.+)')
+						if not name then
+							return false, 'malformed menu option '..s
+						end
+						table.insert(menuvals,{name,val})
+					end
+				end
+				shootscript = chdkmenuscript.process_script{
+					file=args.camscript,
+					cfgfile=args.cfg,
+					tplfile=args.tpl,
+					menuvals=menuvals,
+					info_fn=cli.infomsg,
+				}
+			else
+				if args.tpl then
+					return false,'-tpl requires -camscript'
+				end
+				if args.cfg then
+					return false,'-cfg requires -camscript'
+				end
+				if args.menuopts then
+					return false,'-menuopts requires -camscript'
+				end
+			end
 
 			-- convert to integer ms
 			if args.int then
@@ -2192,87 +2647,112 @@ PC clock times are set to the start of download, not per image
 			if not rstatus then
 				return false,rerr
 			end
+			local execinfo = {}
+			local rs_init_vals = rstatus
 
-			cli.dbgmsg('rs_shoot\n')
-			-- TODO script errors will not get picked up here
-			con:exec('rs_shoot('..opts_s..')',{libs={'rs_shoot'}})
-
-			local rcopts={}
-			if args.jpg then
-				rcopts.jpg=chdku.rc_handler_file(dst_dir,dst)
-			end
-			if args.dng then
-				if args.badpix == true then
-					args.badpix = 0
-				end
-				local dng_info = {
-					lstart=opts.lstart,
-					lcount=opts.lcount,
-					badpix=args.badpix,
-				}
-				rcopts.dng_hdr = chdku.rc_handler_store(function(chunk) dng_info.hdr=chunk.data end)
-				rcopts.raw = chdku.rc_handler_raw_dng_file(dst_dir,dst,'dng',dng_info)
+			-- start the shooting script
+			-- NOTE script runtime errors will not get picked up here, since script
+			-- must run asynchronously with capture_get_data logic
+			if shootscript then
+				cli.dbgmsg('rs script %s\n',args.script)
+				con:exec('rs_opts='..opts_s..' '..shootscript,{libs={'rs_shoot'},execinfo=execinfo})
 			else
-				if args.raw then
-					rcopts.raw=chdku.rc_handler_file(dst_dir,dst)
+				cli.dbgmsg('rs_shoot\n')
+				con:exec('rs_shoot('..opts_s..')',{libs={'rs_shoot'},execinfo=execinfo})
+			end
+
+			local rcopts=chdku.rc_init_std_handlers{
+				jpg=args.jpg,
+				dng=args.dng,
+				raw=args.raw,
+				craw=args.craw,
+				dnghdr=args.dnghdr,
+				dst=dst,
+				dst_dir=dst_dir,
+				badpix=args.badpix,
+				lstart=opts.lstart,
+				lcount=opts.lcount,
+			}
+			rcopts.execinfo=execinfo
+			rcopts.do_subst=do_subst
+			-- TODO rlib script should return status or use error()
+			-- may want different formatting for debug messages
+			local msg_handler_print = function(msg) cli.infomsg('%s\n',chdku.format_script_msg(msg)) end
+			rcopts.msg_handlers = {
+				['return'] = msg_handler_print,
+				user = msg_handler_print,
+			}
+
+			if args.shotwait then
+				rcopts.timeout=tonumber(args.shotwait)
+			else
+				if opts.tv then -- opts.tv is normalized to a tv96 value
+					-- 2x to allow for dark frame if enabled
+					rcopts.timeout=10000 + 2*exp.tv96_to_shutter(opts.tv)*1000
+				else
+					rcopts.timeout=20000
 				end
-				if args.dnghdr then
-					rcopts.dng_hdr=chdku.rc_handler_file(dst_dir,dst)
+				-- ensure timeout is longer than interval
+				if opts.int and rcopts.timeout < opts.int + 10000 then
+					rcopts.timeout = opts.int + 10000
 				end
+			end
+			if args.seq then
+				prefs.cli_shotseq = tonumber(args.seq)
 			end
 
 			local status,err
 			local shot = 1
-			repeat 
+			repeat
+				-- wait for script on final shot
+				-- TODO may not want to wait with -script, but script must end for cleanup
+				if shot == opts.shots then
+					rcopts.wait_script = true
+				end
+				rcopts.shotseq=prefs.cli_shotseq
 				cli.dbgmsg('get data %d\n',shot)
 				status,err = con:capture_get_data_pcall(rcopts)
 				if not status then
-					warnf('capture_get_data error %s\n',tostring(err))
-					cli.dbgmsg('sending stop message\n')
-					con:write_msg_pcall('stop')
+					-- full error message will be returned by cli command, don't double print here
+					warnf('capture_get_data failed\n')
+					local pstatus,perr = pcall(function()
+						if con:is_connected() then
+							if con:script_status().run then
+								cli.dbgmsg('sending stop message\n')
+								con:write_msg('stop')
+								-- give the script some time to end, will be killed on cleanup if it doesn't
+								con:wait_status{timeout=1000,run=false}
+							end
+							-- if get_capture_data failed, may be unprocessed messages, append
+							con:read_all_msgs{
+								['return']=msg_handler_print,
+								user=msg_handler_print,
+								error=function(msg)
+									err = tostring(err) .. '\n' .. chdku.format_exec_error(execinfo,msg)
+								end
+							}
+						end
+					end)
+					if not pstatus then
+						warnf('error attempting cleanup %s\n',tostring(perr))
+					end
 					break
 				end
 				shot = shot + 1
+				prefs.cli_shotseq = prefs.cli_shotseq+1
+				collectgarbage('collect') -- keep uncollected lbufs from building up
+										  -- TODO should be done in a generic way in wait_status / cli prompt?
 			until shot > opts.shots
 
-			local t0=ustime.new()
-			-- wait for shot script to end or timeout
-			local wpstatus,wstatus=con:wait_status_pcall{
-				run=false,
-				timeout=30000,
-			}
-			if not wpstatus then
-				warnf('error waiting for shot script %s\n',tostring(werr))
-			else
-				if wstatus.timeout then
-					warnf('timed out waiting for shot script\n')
-				end
-				-- TODO should allow passing a message handler to capture_get_data
-				-- stop immediately on script error
-				if wstatus.msg then
-					con:read_all_msgs({
-						['return']=function(msg,opts)
-							warnf("unexpected script return %s\n",tostring(msg.value))
-						end,
-						user=function(msg,opts)
-							warnf("unexpected script msg %s\n",tostring(msg.value))
-						end,
-						error=function(msg,opts)
-							warnf("script error %s\n",tostring(msg.value))
-						end,
-					})
-				end
-			end
-			cli.dbgmsg("script wait time %.4f\n",ustime.diff(t0)/1000000)
-
-			local ustatus, uerr = con:execwait_pcall('init_usb_capture(0)') -- try to uninit
+ 			-- try to uninit, killing any still running script
+			local ustatus, uerr = con:execwait_pcall('rs_cleanup('..serialize(rs_init_vals)..')',{libs={'rs_shoot_cleanup',clobber=true}})
 			-- if uninit failed, combine with previous status
 			if not ustatus then
 				uerr = 'uninit '..tostring(uerr)
 				status = false
 				if err then
-					err = err .. ' ' .. uerr
-				else 
+					err = tostring(err) .. ' ' .. uerr
+				else
 					err = uerr
 				end
 			end
@@ -2285,8 +2765,8 @@ PC clock times are set to the start of download, not per image
 	{
 		names={'rsint'},
 		help='shoot and download with interactive control',
-		arghelp="[local] [options]",
-		args=cli.argparser.create{
+		arghelp="[dest] [options]",
+		args=argparser.create{
 			u='s',
 			tv=false,
 			sv=false,
@@ -2295,7 +2775,9 @@ PC clock times are set to the start of download, not per image
 			isomode=false,
 			nd=false,
 			sd=false,
+			sdmode=false,
 			jpg=false,
+			craw=false,
 			raw=false,
 			dng=false,
 			dnghdr=false,
@@ -2304,9 +2786,20 @@ PC clock times are set to the start of download, not per image
 			badpix=false,
 			cmdwait=60,
 			cont=false,
+			pipe=false,
+			shotwait=false,
+			filedummy=false,
+			jpgdummy=false,
+			nosubst=false,
+			seq=false,
 		},
 		help_detail=[[
- [local]       local destination directory or filename (w/o extension!)
+ [dest] path/name specification for saved files
+  None: Save in current directory, with default names like IMG_0123.jpg
+  Contains a '$': Name generated using substitutions below (unless -nosubst)
+  Ending in '/' or name of existing directory: Default names saved in directory
+  Other: Extension appended based on type. Not useful with multi-shot options
+
  options:
    -u=<s|a|96>
       s   standard units (default)
@@ -2314,12 +2807,18 @@ PC clock times are set to the start of download, not per image
       96  APEX*96
    -tv=<v>    shutter speed. In standard units both decimal and X/Y accepted
    -sv=<v>    ISO value, Canon "real" ISO
-   -svm=<v>   ISO value, Canon "Market" ISO (requires CHDK 1.3)
+   -svm=<v>   ISO value, Canon "Market" ISO (requires CHDK 1.3 or later)
    -av=<v>    Aperture value. In standard units, f number
    -isomode=<v> ISO mode, must be ISO value in Canon UI, shooting mode must have manual ISO
    -nd=<in|out> set ND filter state
-   -sd=<v>[units]  subject distance, units one of m, mm, in, ft default m
+   -sd=<v>[units] subject distance (focus), units one of m, mm, in, ft default m
+                  Decimals accepted, -1 or inf for infinity.
+   -sdmode=<mode> prefer <mode> for SD override, one of AF, AFL, MF, NONE
+                  if NONE, override will be ignored if not supported in current mode
+                  if not given, the current camera mode is preferred
+                  if port requires a different mode for SD override, it will be used
    -jpg         jpeg, default if no other options (not supported on all cams)
+   -craw        Canon native raw, requires CHDK >=1.5, and remoteshoot support
    -raw         framebuffer dump raw
    -dng         DNG format raw
    -dnghdr      save DNG header to a seperate file, ignored with -dng
@@ -2328,7 +2827,12 @@ PC clock times are set to the start of download, not per image
    -badpix[=n]  interpolate over pixels with value <= n, default 0, (dng only)
    -cmdwait=n   wait n seconds for command, default 60
    -cont        use continuous mode
-
+   -shotwait=<n> wait n ms for shot to complete, default 20000 or 2*tv+10000 if -tv given
+   -pipe=<program> read commands from standard output of <program> instead of stdin
+   -filedummy   write dummy IMG_nnnn.JPG (or .CR2) to avoid play / shutdown crash on some
+                cams. -jpgdummy also accepted for backward compatibility
+   -nosubst     don't do string substitution on file names
+   -seq=<n>     initial value for shotseq subst string, default cli_shotseq
 
  The following commands are available at the rsint> prompt
   s    shoot
@@ -2342,28 +2846,32 @@ PC clock times are set to the start of download, not per image
  The camera must be set to continuous mode in the Canon UI
  CHDK 1.3 shoot hooks must be available
  The l command must be used to exit
+
+Substitutions
+${serial}         camera serial number, or empty if not available
+${pid,strfmt}     camera platform ID, default format %x
+${ldate,datefmt}  Time of shot (PC clock), os.date format, default %Y%m%d_%H%M%S
+${lts,strfmt}     Time of shot as unix timestamp + microseconds, default format %f
+${lms,strfmt}     Time of shot milliseconds part, default format %03d
+${name}           Image full name, like IMG_1234.JPG
+${basename}       Image name without extension, like IMG_1234
+${ext}            Image extension, like .jpg
+${imgnum}         Image number like 1234
+${imgfmt}         Image format, one of 'JPG', 'DNG', 'RAW', 'DNG_HDR'
+${shotseq}        Sequential number incremented per shot
+Standard string substitutions
 ]],
-		func=rsint.cli_cmd_func,
+		func=function(self,args)
+			return rsint.run(args)
+		end,
 	},
 	{
 		names={'rec'},
 		help='switch camera to shooting mode',
-		func=function(self,args) 
-			local rstatus,rerr = con:execwait([[
-if not get_mode() then
-	switch_mode_usb(1)
-	local i=0
-	while not get_mode() and i < 300 do
-		sleep(10)
-		i=i+1
-	end
-	if not get_mode() then
-		return false, 'switch failed'
-	end
-	return true
-end
-return false,'already in rec'
-]])
+		func=function(self,args)
+			local rstatus,rerr = con:execwait(([[
+return rlib_switch_mode(1,%s)
+]]):format(prefs.cam_switch_mode_timeout),{libs='switch_mode'})
 			cli:mode_change()
 			return rstatus,rerr
 		end,
@@ -2371,31 +2879,236 @@ return false,'already in rec'
 	{
 		names={'play'},
 		help='switch camera to playback mode',
-		func=function(self,args) 
-			local rstatus,rerr = con:execwait([[
-if get_mode() then
-	switch_mode_usb(0)
-	local i=0
-	while get_mode() and i < 300 do
-		sleep(10)
-		i=i+1
-	end
-	if get_mode() then
-		return false, 'switch failed'
-	end
-	return true
-end
-return false,'already in play'
-]])
+		func=function(self,args)
+			local rstatus,rerr = con:execwait(([[
+return rlib_switch_mode(0,%s)
+]]):format(prefs.cam_switch_mode_timeout),{libs='switch_mode'})
 			cli:mode_change()
 			return rstatus,rerr
+		end,
+	},
+	{
+		names={'clock'},
+		help='show or set camera date/time',
+		arghelp="[options] [-set <date> <time>]",
+		args=argparser.create({
+			set=false,
+			sync=false,
+			nosubsec=false,
+			utc=false,
+			quiet=false,
+		}),
+		help_detail=[[
+ <date>
+ 	date to set, as YYYY/MM/DD
+ <time>
+	time to set, as HH:MM:SS[AM|PM]. 24 hour assumed if AM / PM not present
+
+ options:
+   -set       set the clock to the specified date and time
+   -sync      set clock to current PC time
+   -nosubsec  on sync, do not use sub-second precision.
+   -utc       on sync, set camera to current UTC time
+   -quiet     don't print old/new when setting
+
+ NOTE
+  This command is not aware of camera DST and timezone settings. The time shown
+  or set is as it would appear on the camera display with the current settings.
+  With -set, the date and time are not strictly validated.
+]],
+
+		func=function(self,args)
+			local ccu=require'camclockutil'
+			if not args.set then
+				if #args > 0 then
+					return false, 'unexpected args'
+				end
+				if not args.sync then
+					local t=con:execwait([[return os.date('*t')]])
+					return true, ('%d/%02d/%02d %02d:%02d:%02d'):format(t.year,t.month,t.day,t.hour,t.min,t.sec)
+				end
+			end
+
+			local lt,ot,nt
+			if args.set then
+				if #args ~= 2 then
+					return false, 'expected YYYY/MM/DD HH:MM:SS'
+				end
+				lt=ccu.parse_simple_datetime(args[1],args[2])
+				ot,nt=ccu.set_clock(lt)
+			elseif args.sync then
+				lt,ot,nt=ccu.sync({
+					utc=args.utc,
+					subsec=not args.nosubsec,
+				})
+			end
+			-- set should always set to start of second, so shouldn't get sec changing before call completes
+			-- can't use util.compare_values because os.date('*t') may have other fields
+			for _,k in ipairs({'year','month','day','hour','min','sec'}) do
+				if lt[k] ~= nt[k] then
+					util.warnf("set %d/%02d/%02d %02d:%02d:%02d got %d/%02d/%02d %02d:%02d:%02d\n",
+								lt.year,lt.month,lt.day,lt.hour,lt.min,lt.sec,
+								nt.year,nt.month,nt.day,nt.hour,nt.min,nt.sec)
+					break
+				end
+			end
+			if not quiet then
+				return true,('old %d/%02d/%02d %02d:%02d:%02d\nnew %d/%02d/%02d %02d:%02d:%02d\n'):format(
+								ot.year,ot.month,ot.day,ot.hour,ot.min,ot.sec,
+								nt.year,nt.month,nt.day,nt.hour,nt.min,nt.sec)
+			end
+			return true
+		end,
+	},
+	{
+		names={'camscript'},
+		help='convert or run CHDK script with menu options',
+		arghelp="[options] <camera script> [menu options]",
+		args=argparser.create({
+			cfg=false,
+			savecfg=false,
+			tpl=false,
+			save=false,
+			load=false,
+			run=false,
+			wait=false,
+			quiet=false,
+		}),
+		help_detail=[[
+ <camera script>
+   CHDK camera Lua script with menu header.
+   If path begins with A/, the file is loaded from the camera
+ [menu options]
+   Script menu items, by name like a=1 b=2
+   Numeric values are as they would appear in the menu header
+   Booleans may be with either true/false or 0/1
+   Table and enums may be set by value using name.value, like
+    foo.value=Whatever
+   Range checks from the header are applied
+ options:
+   -cfg=<filename>
+     CHDK script configuration for menu values, as found in CHDK/DATA/scriptname.N
+     If path begins with A/, the file is loaded from the camera
+   -tpl=<filename> camera lua script template, where
+      --[!glue:start] causes everything preceding it to be discarded
+      --[!glue:vars] is replaced by code that sets the CHDK menu variables
+      --[!glue:body] is replaced by the body to the script, or a line that loads
+                     a camera side file specified with -remote
+   -save=<filename> save converted file to <filename>
+   -savecfg=<filename> save final settings values as script cfg
+   -run   run converted script
+   -wait  wait for converted script to complete
+   -load[=<filename>] load camera script with loadfile() instead of including
+                      full script in output. If filename is omitted, defaults
+                      to A/CHDK/SCRIPTS/<script name> if script is PC file,
+                      or full path to script if a camera file
+   -quiet don't print status messages
+]],
+		func=function(self,args)
+			if #args < 1 then
+				return false, 'expected camera script name'
+			end
+			local scriptfile = args[1]
+			if args.save and type(args.save) ~= 'string' then
+				return false, 'expected save filename'
+			end
+			if args.savecfg and type(args.savecfg) ~= 'string' then
+				return false, 'expected savecfg filename'
+			end
+			if args.tpl and type(args.tpl) ~= 'string' then
+				return false, 'expected template filename'
+			end
+			local check_only
+			if not args.save and not args.run and not args.savecfg then
+				check_only = true
+				if not args.quiet then
+					cli.infomsg('no -run, -save or -savecfg, syntax check only\n')
+				end
+			end
+
+			local menuvals
+			if #args > 1 then
+				menuvals = {}
+				for i=2,#args do
+					local name,val = args[i]:match('([A-Za-z0-9._-]+)=(.+)')
+					if not name then
+						return false, 'malformed menu option '..args[i]
+					end
+					table.insert(menuvals,{name,val})
+				end
+			end
+
+			local script = chdkmenuscript.process_script{
+				file=scriptfile,
+				cfgfile=args.cfg,
+				load=args.load,
+				tplfile=args.tpl,
+				save=args.save,
+				savecfg=args.savecfg,
+				menuvals=menuvals,
+				info_fn=function(...)
+					if not args.quiet then
+						cli.infomsg(...)
+					end
+				end,
+			}
+
+			if check_only then
+				return true,'OK'
+			end
+			if args.run then
+				if args.wait then
+					local rets={}
+					local msgs=function(msg)
+						-- TODO
+						printf('%s\n',chdku.format_script_msg(msg))
+					end
+					con:execwait(script,{rets=rets,msgs=msgs})
+					local r=''
+					for i=1,table.maxn(rets) do
+						r=r .. chdku.format_script_msg(rets[i]) .. '\n'
+					end
+					return true,r
+				else
+					con:exec(script)
+				end
+			end
+			return true
+		end,
+	},
+	{
+		names={'unlock'},
+		help='unlock camera keyboard and screen',
+		arghelp="[-kb]",
+		args=argparser.create({
+			kb=false,
+		}),
+		help_detail=[[
+ options:
+  -kb   unlocks keyboard only
+
+ This command sends events to enable camera keyboard and screen, which are
+ commonly locked by Canon firmware when PTP used.
+ Use cam_connect_unlock_ui to automatically unlock on connect.
+]],
+		func=function(self,args)
+			if type(args.kb) ~= 'boolean' then
+				return false,'invalid option'
+			end
+			if #args > 0 then
+				return false, 'unexpected args'
+			end
+			con:execwait(('ptp_ui_unlock(%s)'):format(args.kb),{libs='ptp_ui_unlock'})
+			return true
 		end,
 	},
 }
 
 
-prefs._add('cli_time','boolean','show cli execution times')
-prefs._add('cli_xferstats','boolean','show cli data transfer stats')
-prefs._add('cli_verbose','number','control verbosity of cli',1)
+prefs._add('cli_time','boolean','show CLI execution times')
+prefs._add('cli_xferstats','boolean','show CLI data transfer stats')
+prefs._add('cli_verbose','number','control verbosity of CLI',1)
 prefs._add('cli_source_max','number','max nested source calls',10)
+prefs._add('cli_error_exit','boolean','exit on CLI command error')
+prefs._add('cli_shotseq','number','shooting command ${shotseq} value, incremented on shot',1)
 return cli
